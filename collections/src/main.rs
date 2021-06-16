@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 
 fn main() {
     // vector
@@ -53,20 +54,75 @@ fn main() {
         SpreadsheetCell::Float(10.12),
     ];
 
-    let v = vec![3, 5, 10, 56, 78, 3, 20, 15, 30, 5, 78, 10, 12];
+    let mut v = vec![3, 5, 10, 56, 78, 3, 20, 15, 30, 5, 78, 10, 12, 13];
     // let mut sum = 0;
     // for i in &v {
     //     sum += *i;
     // }
     println!("Mean of v: {}", mean_vec(&v));
-    println!("{}", v[2]);
+    println!("Median of v: {}", median_vec(&mut v));
+    println!("{:?}", v);
+
+    let mode = mode_vec(&v);
+    println!("The value that occurs most often: {:?}", &mode);
+    // for i in &mode {
+    //     println!("the value that occurs most often ")
+    // }
+
+    let s = String::from("ble");
+    println!("{}", to_pig_latin(&s));
+    println!("{}", s.chars().next().unwrap())
 
 }
 
-fn mean_vec (v: &Vec<i32>) -> i32 {
+fn mean_vec (v: &Vec<i32>) -> f64 {
+    // 均值
     let mut sum = 0;
     for i in v {
         sum += *i;
     }
-    sum
+    sum as f64 / v.len() as f64
 }
+
+fn median_vec (v: &mut Vec<i32>) -> i32 {
+    // 中值 避免改变原值 先做复制
+    let mut _v = v.clone();
+    _v.sort_unstable();
+    _v[v.len()/2]
+}
+
+fn mode_vec (v: &Vec<i32>) -> Vec<i32> {
+    // 出现最多次数
+    let mut _mode: Vec<i32> = Vec::new();
+    let mut map = HashMap::new();
+    for _v in v {
+        let count = map.entry(*_v).or_insert(0);  // returns a mutable reference (&mut V)
+        *count += 1;
+    }
+    let mut _max: u8 = 0;
+    for (_, v) in &map {
+        if *v > _max {
+            _max = *v;
+        }
+    }
+    println!("Occure most times: {}", _max);
+    for (k, v) in &map {
+        if *v == _max {
+            _mode.push(*k);
+        }
+    }
+    _mode
+}
+
+fn to_pig_latin (s: &String) -> String {
+    let mut s1 = s.clone();
+    let first_char = s.chars().next();
+    let vowel = ['a', 'e', 'i', 'o', 'u'];
+    for v in vowel.iter() {
+        if s1.starts_with(*v) {
+            s1.push_str("-hay")
+        }
+    }
+    s1
+}
+
