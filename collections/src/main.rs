@@ -69,9 +69,8 @@ fn main() {
     //     println!("the value that occurs most often ")
     // }
 
-    let s = String::from("ble");
+    let s = String::from("egg");
     println!("{}", to_pig_latin(&s));
-    println!("{}", s.chars().next().unwrap())
 
 }
 
@@ -116,13 +115,24 @@ fn mode_vec (v: &Vec<i32>) -> Vec<i32> {
 
 fn to_pig_latin (s: &String) -> String {
     let mut s1 = s.clone();
-    let first_char = s.chars().next();
+    let first_char = s.chars().next().unwrap();
     let vowel = ['a', 'e', 'i', 'o', 'u'];
-    for v in vowel.iter() {
-        if s1.starts_with(*v) {
-            s1.push_str("-hay")
-        }
+    if vowel.contains(&first_char) {
+        s1.push_str("-hay");
+        return s1;
+    } else {
+        let mut s2 = String::from(&s1[1..]);
+        s2.push('-');
+        s2.push(first_char);
+        return s2 + "ay";
     }
-    s1
+}
+
+fn add_employee (name: String, department: &String, map: &mut HashMap<String, Vec<String>>) -> HashMap<String, Vec<String>> {
+    match map.get(department) {
+        Some(vec) => vec.push(name),
+        None => println!("No such department."),
+    }
+    // map
 }
 
