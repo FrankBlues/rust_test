@@ -72,6 +72,12 @@ fn main() {
     let s = String::from("egg");
     println!("{}", to_pig_latin(&s));
 
+    // employees test
+    let mut employees: HashMap<String, Vec<String>> = HashMap::new();
+    add_employee("wang".to_string(), "Sales".to_string(), &mut employees);
+    println!("{:?}", employees)
+
+
 }
 
 fn mean_vec (v: &Vec<i32>) -> f64 {
@@ -128,11 +134,13 @@ fn to_pig_latin (s: &String) -> String {
     }
 }
 
-fn add_employee (name: String, department: &String, map: &mut HashMap<String, Vec<String>>) -> HashMap<String, Vec<String>> {
-    match map.get(department) {
+fn add_employee (name: String, department: String, mut map: &mut HashMap<String, Vec<String>>) {
+    match map.get_mut(&department) {
         Some(vec) => vec.push(name),
-        None => println!("No such department."),
+        None => {
+            println!("No such department.");
+            let _vec = vec!{name};     
+            map.insert(department, _vec);}
     }
-    // map
 }
 
