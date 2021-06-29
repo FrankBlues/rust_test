@@ -37,7 +37,9 @@ fn largest_char(list: &[char]) -> char {
     largest
 }
 
-fn largest<T>(list: &[T]) -> T {
+// 实现PartialOrd的类型,避免>报错；
+// 实现Copy的类型，避免[T]报错;
+fn largest<T: PartialOrd + Copy>(list: &[T]) -> T {
     let mut largest = list[0];
 
     for &item in list {
