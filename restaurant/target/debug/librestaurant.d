@@ -1,1 +1,0 @@
-D:\work\code\rust_test\restaurant\target\debug\librestaurant.rlib: D:\work\code\rust_test\restaurant\src\front_of_house\serving.rs D:\work\code\rust_test\restaurant\src\front_of_house.rs D:\work\code\rust_test\restaurant\src\lib.rs
