@@ -75,12 +75,113 @@ fn main() {
         ),
     }
 
-    
+    // Matching on nested enums
+    let msg = Message1::ChangeColor(Color::Hsv(0, 160, 255));
 
+    match msg {
+        Message1::ChangeColor(Color::Rgb(r, g, b)) => println!(
+            "Change the color to red {}, green {}, and blue {}",
+            r, g, b
+        ),
+        Message1::ChangeColor(Color::Hsv(h, s, v)) => println!(
+            "Change the color to hue {}, saturation {}, and value {}",
+            h, s, v
+        ),
+        _ => (),
+    }
 
-    
+    // Destructuring Structs and Tuples
+    let ((feet, inches), Point { x, y }) = ((3, 10), Point { x: 3, y: -10 });
+
+    // Using an underscore within patterns that match Some variants when we don’t need to use the value inside the Some
+    let mut setting_value = Some(5);
+    let new_setting_value = Some(10);
+
+    match (setting_value, new_setting_value) {
+        (Some(_), Some(_)) => {
+            println!("Can't overwrite an existing customized value");
+        }
+        _ => {
+            setting_value = new_setting_value;
+        }
+    }
+
+    println!("setting is {:?}", setting_value);
+
+    // Ignoring multiple parts of a tuple
+    let numbers = (2, 4, 8, 16, 32);
+
+    match numbers {
+        (first, _, third, _, fifth) => {
+            println!("Some numbers: {}, {}, {}", first, third, fifth)
+        }
+    }
+
+    // Ignoring all fields of a Point except for x by using ..
+    let origin = Point1 { x: 0, y: 0, z: 0 };
+
+    match origin {
+        Point1 { x, .. } => println!("x is {}", x),
+    }
+
+    // Matching only the first and last values in a tuple and ignoring all other values
+    let numbers = (2, 4, 8, 16, 32);
+
+    match numbers {
+        (first, .., last) => {
+            println!("Some numbers: {}, {}", first, last);
+        }
+    }
+
+    // Adding a match guard to a pattern
+    let num = Some(4);
+
+    match num {
+        Some(x) if x < 5 => println!("less than five: {}", x),
+        Some(x) => println!("{}", x),
+        None => (),
+    }
+
+    // Using a match guard to test for equality with an outer variable
+    let x = Some(5);
+    let y = 10;
+
+    match x {
+        Some(50) => println!("Got 50"),
+        Some(n) if n == y => println!("Matched, n = {}", n),
+        _ => println!("Default case, x= {:?}", x),
+    }
+
+    println!("at the end: x = {:?}, y= {}", x, y);
+
+    // Combining multiple patterns with a match guard
+    let x = 4;
+    let y = false;
+
+    match x {
+        4 | 5 | 6 if y => println!("yes"),
+        _ => println!("no"),
+    }
+
+    // Using @ to bind to a value in a pattern while also testing it
+    let msg = Message2::Hello { id: 5 };
+
+    match msg {
+        Message2::Hello {
+            id: id_variable @ 3..=7,
+        } => println!("Found an id in range: {}", id_variable),
+        Message2::Hello { id: 10..=12 } => {
+            println!("Found an id in another range")
+        }
+        Message2::Hello { id } => println!("Found some other id: {}", id),
+    }
 }
 
+struct Point1 {
+    x: i32,
+    y: i32,
+    z: i32,
+}
 
 struct Point {
     x: i32,
@@ -92,4 +193,20 @@ enum Message {
     Move { x: i32, y: i32 },
     Write(String),
     ChangeColor(i32, i32, i32),
+}
+
+enum Message1 {
+    Quit,
+    Move { x: i32, y: i32 },
+    Write(String),
+    ChangeColor(Color),
+}
+
+enum Color {
+    Rgb(i32, i32, i32),
+    Hsv(i32, i32, i32),
+}
+
+enum Message2 {
+    Hello { id: i32 },
 }
