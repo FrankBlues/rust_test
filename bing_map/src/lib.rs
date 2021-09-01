@@ -99,9 +99,31 @@ impl TilesExtent {
         _tiles
     }
 
+    fn tiles2quad_keys(&self, tiles: &Vec<(usize, usize)>) -> Vec<String>{
+        tiles.iter().map(|tup| TileSystem::tile_xy2quad_key(tup.0, tup.1, self.zoom)).collect()
+    }
+
     pub fn quad_keys(&self) -> Vec<String> {
         let _tiles = self.tiles();
-        _tiles.iter().map(|tup| TileSystem::tile_xy2quad_key(tup.0, tup.1, self.zoom)).collect()
+        self.tiles2quad_keys(&_tiles)
+    }
+
+    pub fn construct_download_params(&self, tile_dir: std::path::PathBuf) -> Vec<(String, std::path::PathBuf)>{
+        let tiles = self.tiles();
+        let quad_keys = self.tiles2quad_keys(&tiles);
+
+        let mut urls_files: Vec<(String, std::path::PathBuf)> = Vec::with_capacity(quad_keys.len());
+        // z/x/y.jpeg
+        for (i, (x, y)) in tiles.iter().enumerate() {
+            let q = &quad_keys[i];
+            let url = download_util::constuct_url(q, "a");
+            let path = tile_dir.join(x.to_string()).join(y.to_string() + ".jpeg");
+            if !path.parent().unwrap().exists() {
+                std::fs::create_dir_all(&path.parent().unwrap()).unwrap();
+            }
+            urls_files.push((url, path));
+        }
+        urls_files
     }
 
 }

@@ -36,7 +36,7 @@ pub mod download_utils {
 
     pub fn download_files(urls_files: Vec<(String, PathBuf)>) {
         for (u, f) in urls_files.iter() {
-            println!("Downloading from {}", u);
+            // println!("Downloading from {}", u);
             let result = download_one_tile(u, f);
             match result {
                 Ok(()) => (),
@@ -49,7 +49,7 @@ pub mod download_utils {
         let client = Client::new();
         let bodies = stream::iter(urls_files)
             .map(|(url, path)| {
-                println!("Downloading from {}.", url);
+                // println!("Downloading from {}.", url);
                 let client = &client;
                 async move {
                     fetch_url(client, &url, &path).await
