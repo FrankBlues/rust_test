@@ -4,6 +4,9 @@ use crate::bing_tiles_system::tiles_system::TileSystem;
 mod download_utils;
 pub use download_utils::download_utils as download_util;
 
+mod io_utils;
+pub use io_utils::get_files as get_files;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,7 +64,6 @@ mod tests {
     }
 }
 
-
 pub struct TilesExtent {
     lon0: f64,
     lat0: f64,
@@ -108,7 +110,7 @@ impl TilesExtent {
         self.tiles2quad_keys(&_tiles)
     }
 
-    pub fn construct_download_params(&self, tile_dir: std::path::PathBuf) -> Vec<(String, std::path::PathBuf)>{
+    pub fn construct_download_params(&self, tile_dir: &std::path::PathBuf) -> Vec<(String, std::path::PathBuf)>{
         let tiles = self.tiles();
         let quad_keys = self.tiles2quad_keys(&tiles);
 
