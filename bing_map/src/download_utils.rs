@@ -3,8 +3,8 @@ pub mod download_utils {
     use std::path::PathBuf;
     // use reqwest::get;
 
-    use rand::Rng;
     use futures::{stream, StreamExt};
+    use rand::Rng;
     use reqwest::Client;
     const CONCURRENT_REQUESTS: usize = 8;
 
@@ -15,26 +15,36 @@ pub mod download_utils {
     /// http://h{0-3}.ortho.tiles.virtualearth.net/tiles/a132100103223330121.jpeg?g=129
     pub fn constuct_url(quad_key: &str, style: &str) -> String {
         let domain = rand::thread_rng().gen_range(0..=7);
-        format!("http://ecn.t{}.tiles.virtualearth.net/tiles/{}{}.jpeg?g=129", domain, style, quad_key)
+        format!(
+            "http://ecn.t{}.tiles.virtualearth.net/tiles/{}{}.jpeg?g=129",
+            domain, style, quad_key
+        )
     }
 
-    pub fn download_one_tile(url: &String, file_name: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn download_one_tile(
+        url: &String,
+        file_name: &PathBuf,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let res = reqwest::blocking::get(url)?;
         let mut file = std::fs::File::create(file_name)?;
         let mut content = Cursor::new(res.bytes()?);
         std::io::copy(&mut content, &mut file)?;
         Ok(())
     }
-    
-    pub async fn fetch_url(client: &reqwest::Client, url: &String, file_name: &PathBuf) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+
+    pub async fn fetch_url(
+        client: &reqwest::Client,
+        url: &String,
+        file_name: &PathBuf,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let response = client.get(url).send().await?;
         let mut file = std::fs::File::create(file_name)?;
-        let mut content =  Cursor::new(response.bytes().await?);
+        let mut content = Cursor::new(response.bytes().await?);
         std::io::copy(&mut content, &mut file)?;
         Ok(())
     }
 
-    pub fn download_files(urls_files: Vec<(String, PathBuf)>) {
+    pub fn download_files(urls_files: &Vec<(String, PathBuf)>) {
         for (u, f) in urls_files.iter() {
             // println!("Downloading from {}", u);
             let result = download_one_tile(u, f);
@@ -45,15 +55,13 @@ pub mod download_utils {
         }
     }
 
-    pub async fn download_files_async(urls_files: Vec<(String, PathBuf)>) {
+    pub async fn download_files_async(urls_files: &Vec<(String, PathBuf)>) {
         let client = Client::new();
         let bodies = stream::iter(urls_files)
             .map(|(url, path)| {
                 // println!("Downloading from {}.", url);
                 let client = &client;
-                async move {
-                    fetch_url(client, &url, &path).await
-                }
+                async move { fetch_url(client, &url, &path).await }
             })
             .buffer_unordered(CONCURRENT_REQUESTS);
 
@@ -70,32 +78,26 @@ pub mod download_utils {
     }
 
     /// parallel download use tokio::spawn
-    pub async fn download_files_async1(urls_files: Vec<(String, PathBuf)>) {
+    pub async fn download_files_async1(urls_files: &'static Vec<(String, PathBuf)>) {
         let client = Client::new();
         let bodies = stream::iter(urls_files)
             .map(|(url, path)| {
                 println!("Downloading from {}.", url);
                 let client = client.clone();
-                tokio::spawn(async move {
-                    fetch_url(&client, &url, &path).await
-                })
+                tokio::spawn(async move { fetch_url(&client, &url, &path).await })
             })
             .buffer_unordered(CONCURRENT_REQUESTS);
 
         bodies
             .for_each(|b| async {
                 match b {
-                    Ok(b) => {
-                        match b {
-                            Ok(()) => (),
-                            Err(e) => eprintln!("Problem downloading the file: {}", e),
-                        }
-                    }
+                    Ok(b) => match b {
+                        Ok(()) => (),
+                        Err(e) => eprintln!("Problem downloading the file: {}", e),
+                    },
                     Err(e) => eprintln!("Got a tokio::JoinError: {}", e),
                 }
             })
             .await;
     }
-        
-
 }

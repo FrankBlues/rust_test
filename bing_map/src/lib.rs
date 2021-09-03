@@ -1,11 +1,14 @@
-pub mod bing_tiles_system;
-use crate::bing_tiles_system::tiles_system::TileSystem;
+mod bing_tiles_system;
+pub use crate::bing_tiles_system::tiles_system::TileSystem;
 
 mod download_utils;
 pub use download_utils::download_utils as download_util;
 
 mod io_utils;
-pub use io_utils::get_files as get_files;
+pub use io_utils::write_string_to_text;
+
+mod image_process;
+pub use image_process::merge_tiles;
 
 #[cfg(test)]
 mod tests {
@@ -28,7 +31,10 @@ mod tests {
 
     #[test]
     fn res_test() {
-        assert_eq!((TileSystem::ground_resolution(0., 14)*10000.).round()/10000., 9.5546)
+        assert_eq!(
+            (TileSystem::ground_resolution(0., 14) * 10000.).round() / 10000.,
+            9.5546
+        )
     }
 
     #[test]
@@ -89,10 +95,22 @@ impl TilesExtent {
         TileSystem::xy2tile_xy(_x, _y)
     }
 
+    pub fn tile_extent(&self) -> ((usize, usize), (usize, usize)) {
+        // upper left tile number
+        let ul_tile = TilesExtent::tilexy_from_lonlat(self.lon0, self.lat0, self.zoom);
+        // bottom right tile number
+        let br_tile = TilesExtent::tilexy_from_lonlat(self.lon1, self.lat1, self.zoom);
+        (ul_tile, br_tile)
+    }
+
+    pub fn cal_tile_lonlat(tile_x: usize, tile_y: usize, zoom: u8) -> (f64, f64) {
+        let (x, y) = TileSystem::tile_xy2xy(tile_x, tile_y);
+        TileSystem::xy2latlon(x, y, zoom)
+    }
+
     pub fn tiles(&self) -> Vec<(usize, usize)> {
         let mut _tiles: Vec<(usize, usize)> = Vec::new();
-        let ul_tile = TilesExtent::tilexy_from_lonlat(self.lon0, self.lat0, self.zoom);
-        let br_tile = TilesExtent::tilexy_from_lonlat(self.lon1, self.lat1, self.zoom);
+        let (ul_tile, br_tile) = self.tile_extent();
         for i in ul_tile.0..=br_tile.0 {
             for j in ul_tile.1..=br_tile.1 {
                 _tiles.push((i, j));
@@ -101,16 +119,25 @@ impl TilesExtent {
         _tiles
     }
 
-    fn tiles2quad_keys(&self, tiles: &Vec<(usize, usize)>) -> Vec<String>{
-        tiles.iter().map(|tup| TileSystem::tile_xy2quad_key(tup.0, tup.1, self.zoom)).collect()
+    fn tiles2quad_keys(&self, tiles: &Vec<(usize, usize)>) -> Vec<String> {
+        tiles
+            .iter()
+            .map(|tup| TileSystem::tile_xy2quad_key(tup.0, tup.1, self.zoom))
+            .collect()
     }
 
+    /// 计算quad_keys
     pub fn quad_keys(&self) -> Vec<String> {
         let _tiles = self.tiles();
         self.tiles2quad_keys(&_tiles)
     }
 
-    pub fn construct_download_params(&self, tile_dir: &std::path::PathBuf) -> Vec<(String, std::path::PathBuf)>{
+    /// 构建下载参数<url地址, 本地路径>
+    ///
+    pub fn construct_download_params(
+        &self,
+        tile_dir: &std::path::PathBuf,
+    ) -> Vec<(String, std::path::PathBuf)> {
         let tiles = self.tiles();
         let quad_keys = self.tiles2quad_keys(&tiles);
 
@@ -128,4 +155,11 @@ impl TilesExtent {
         urls_files
     }
 
+    /// Generate world file content as String.
+    pub fn gen_world_file_content(&self, tile: &(usize, usize)) -> String {
+        let (lat, lon) = TilesExtent::cal_tile_lonlat(tile.0, tile.1, self.zoom);
+        let (mercator_x, mercator_y) = TileSystem::latlon2mercator(lat, lon);
+        let res = TileSystem::ground_resolution(0., self.zoom);
+        format!("{:.7}\n0\n0\n{:.7}\n{:.7}\n{:.7}", res, -res, mercator_x, mercator_y)
+    }
 }

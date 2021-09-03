@@ -1,97 +1,62 @@
-use std::time::SystemTime;
 use std::path::Path;
-use std::path::PathBuf;
-use bing_map::TilesExtent;
+use std::time::SystemTime;
+
 use bing_map::download_util::download_files_async;
+use bing_map::TilesExtent;
 // use bing_map::download_util::download_files_async1;
-use bing_map::get_files;
-
-extern crate image;
-
-use image::{GenericImageView, ImageBuffer};
+use bing_map::merge_tiles;
+use bing_map::write_string_to_text;
 
 use tokio;
 
+extern crate clap;
+use clap::{Arg, App};
+
 #[tokio::main]
-async fn main()-> Result<(), reqwest::Error> {
-    let (lon0, lat0) =(116.177641, 39.924175);
-    let (lon1, lat1) =(116.183095, 39.921244);
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let matches = App::new("bing map")
+        .version("0.1.0")
+        .author("author")
+        .about("Does awesome things")
+        .arg(Arg::with_name("ul_lonlat")
+            .short("ul")
+            .long("ul_lonlat")
+            .value_name("")
+            .help("Sets a custom config file")
+            .takes_value(true))
+        .get_matches();
+
+    if let Some(c) = matches.value_of("ul_lonlat") {
+        println!("Value for config: {}", c);
+    }
+    let (lon0, lat0) = (116.177641, 39.924175);
+    let (lon1, lat1) = (116.183095, 39.921244);
     let level = 18;
     let tile_dir = Path::new("D:/temp11").join((&level).to_string());
+    let out_png = "d:/merged_test.png";
 
-    // let te = TilesExtent::new(lon0, lat0, lon1, lat1, level);
-    // let urls_files = te.construct_download_params(&tile_dir);
+    let world_file = out_png.replace(".png", ".pgw");
 
-    // //download concurrently
-    // let st_time = SystemTime::now();
-    // download_files_async(urls_files).await;
-    // let lt_time = SystemTime::now();
-    // println!("{:?}", SystemTime::duration_since(&lt_time, st_time).unwrap());
+    let te = TilesExtent::new(lon0, lat0, lon1, lat1, level);
+    let urls_files = te.construct_download_params(&tile_dir);
+    let (tile0, tile1) = te.tile_extent();
+    let world_file_content = te.gen_world_file_content(&tile0);
 
-    let mut merge_files: Vec<String> = Vec::new();
-    let files = get_files(&tile_dir).unwrap();
+    //download concurrently
+    println!("Download start!");
+    let st_time = SystemTime::now();
+    download_files_async(&urls_files).await;
+    let lt_time = SystemTime::now();
+    println!(
+        "{} tiles downloaded, spend {:?}",
+        &urls_files.len(),
+        SystemTime::duration_since(&lt_time, st_time).unwrap()
+    );
 
-    let (start_x, start_y) = (215669, 99314);
-    let mut merged: image::RgbImage = ImageBuffer::new(5 * 256, 4 * 256);
+    println!("Merging the tiles.");
+    merge_tiles(tile0, tile1, out_png, &tile_dir)?;
 
-    for tile_x in start_x..=215673 {
-        for tile_y in start_y..=99317 {
-            let img_path = tile_dir.join(tile_x.to_string()).join(tile_y.to_string() + ".jpeg");
-            let mut img = image::open(&img_path).unwrap().to_rgb8();
-            for (x, y, pixel) in img.enumerate_pixels_mut() {
-                // 计算对应合并后的位置
-                let dst_pixel = merged.get_pixel_mut((tile_x-start_x) * 256 + x, (tile_y - start_y) * y);
-                *dst_pixel = *pixel;
-            }
-        }
-    }
-
-    merged.save("d:/merged3.png").unwrap();
-
-    // let mut path_flag = tile_dir.join(start_x.to_string()).join(start_y.to_string() + ".jpeg");
-    // for (x, y, pixel) in merged.enumerate_pixels_mut() {
-    //     let tile_x = start_x + x / 256;
-    //     let tile_y = start_y + y / 256;
-    //     let img_path = tile_dir.join(tile_x.to_string()).join(tile_y.to_string() + ".jpeg");
-        
-    //     let mut img = image::open(&path_flag).unwrap().to_rgb8();
-    //     if path_flag != img_path {
-    //         println!("处理{:?}", path_flag);
-    //         path_flag = img_path;
-    //         img = image::open(&path_flag).unwrap().to_rgb8();
-    //     }
-    //     *pixel = *img.get_pixel(x % 256, y % 256);
-    // }
-    // merged.save("d:/merged2.png").unwrap();
-
-
-    // for (k, v) in &files {
-    //     println!("Merging directory: {:?}", k);
-    //     let img = image::open(&v[0]).unwrap();
-
-    //     let mut merged: image::RgbImage = ImageBuffer::new(img.width(), img.height()*(v.len() as u32));
-
-    //     let mut all_bytes: Vec<u8> = img.to_bytes();
-    //     for f in &v[1..] {
-    //         let mut bytes = image::open(f).unwrap().to_bytes();
-    //         all_bytes.append(&mut bytes);
-    //     }
-    //     merged.copy_from_slice(&mut all_bytes);
-    //     let out_file = format!("{}{}", k.to_str().unwrap(), ".png");
-    //     merged.save(&out_file).unwrap();
-    //     merge_files.push(out_file);
-    // }
-
-    // let mut merged: image::RgbImage = ImageBuffer::new(5 * 256, 4 * 256);
-    // let mut all_bytes: Vec<u8> = Vec::new();
-    // for f in &merge_files {
-    //     println!("{}", f);
-    //     let mut bytes = image::open(f).unwrap().to_bytes();
-    //     all_bytes.append(&mut bytes);
-    // }
-    // merged.copy_from_slice(&mut all_bytes);
-    // merged.save("d:/merged1.png").unwrap();
-
+    println!("Generate world file.");
+    write_string_to_text(&world_file, world_file_content)?;
     Ok(())
 }
-

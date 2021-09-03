@@ -1,23 +1,31 @@
 pub mod tiles_system {
     use std::f64::consts::PI;
 
-    const EARTH_RADIUS: f64 = 6378137.;  
-    const MIN_LATITUDE: f64 = -85.05112878;  
-    const MAX_LATITUDE: f64 = 85.05112878;  
-    const MIN_LONGITUDE: f64 = -180.;  
+    const EARTH_RADIUS: f64 = 6378137.;
+    const MIN_LATITUDE: f64 = -85.05112878;
+    const MAX_LATITUDE: f64 = 85.05112878;
+    const MIN_LONGITUDE: f64 = -180.;
     const MAX_LONGITUDE: f64 = 180.;
-    fn min(x: f64, y: f64) -> f64{
-        if x < y {x} else {y}
+    const WEB_MERCATOR_R: f64 = PI * EARTH_RADIUS;
+    fn min(x: f64, y: f64) -> f64 {
+        if x < y {
+            x
+        } else {
+            y
+        }
     }
-    
-    fn max(x: f64, y: f64) -> f64{
-        if x > y {x} else {y}
+
+    fn max(x: f64, y: f64) -> f64 {
+        if x > y {
+            x
+        } else {
+            y
+        }
     }
     pub struct TileSystem;
     impl TileSystem {
-    
-        /// Clips a number to the specified minimum and maximum values. 
-        fn clip(n: f64, min_value: f64, max_value: f64) -> f64{
+        /// Clips a number to the specified minimum and maximum values.
+        fn clip(n: f64, min_value: f64, max_value: f64) -> f64 {
             min(max(n, min_value), max_value)
         }
 
@@ -28,10 +36,22 @@ pub mod tiles_system {
         }
 
         /// Determines the ground resolution (in meters per pixel) at a specified  
-        /// latitude and level of detail. 
+        /// latitude and level of detail.
         pub fn ground_resolution(latitude: f64, levels: u8) -> f64 {
             let latitude = TileSystem::clip(latitude, MIN_LATITUDE, MAX_LATITUDE);
-            (latitude * PI / 180.).cos() * 2. * PI * EARTH_RADIUS / (TileSystem::map_size(levels) as f64)
+            (latitude * PI / 180.).cos() * 2. * PI * EARTH_RADIUS
+                / (TileSystem::map_size(levels) as f64)
+        }
+
+        /// Converts a point from latitude/longitude WGS-84 coordinates (in degrees)  
+        /// into web mercator coordinates.
+        pub fn latlon2mercator(latitude: f64, longitude: f64) -> (f64, f64) {
+            let lat = TileSystem::clip(latitude, MIN_LATITUDE, MAX_LATITUDE);
+            let long = TileSystem::clip(longitude, MIN_LONGITUDE, MAX_LONGITUDE);
+            let x = long * WEB_MERCATOR_R / 180.;
+            let y = ((90.0 + lat) * PI / 360.).tan().ln()/(PI / 180.);
+            let y = y * WEB_MERCATOR_R / 180.;
+            (x, y)
         }
 
         /// Determines the map scale at a specified latitude, level of detail,  
@@ -47,7 +67,7 @@ pub mod tiles_system {
             let long = TileSystem::clip(longitude, MIN_LONGITUDE, MAX_LONGITUDE);
             let x = (long + 180.) / 360.;
             let sin_latitude = (lat * PI / 180.).sin();
-            let y = 0.5 - ((1. + sin_latitude) / (1. - sin_latitude)).ln()/(4. * PI);
+            let y = 0.5 - ((1. + sin_latitude) / (1. - sin_latitude)).ln() / (4. * PI);
             let map_size = TileSystem::map_size(levels) as f64;
             let pixel_x = TileSystem::clip(x * &map_size + 0.5, 0., &map_size - 1.);
             let pixel_y = TileSystem::clip(y * &map_size + 0.5, 0., &map_size - 1.);
@@ -57,10 +77,10 @@ pub mod tiles_system {
 
         /// Converts a pixel from pixel XY coordinates at a specified level of detail  
         /// into latitude/longitude WGS-84 coordinates (in degrees).
-        pub fn xy2latlon(pixel_x: usize, pixel_y: usize, levels: u8) -> (f64, f64){
+        pub fn xy2latlon(pixel_x: usize, pixel_y: usize, levels: u8) -> (f64, f64) {
             let map_size = TileSystem::map_size(levels) as f64;
-            let x = TileSystem::clip(pixel_x as f64, 0., &map_size - 1.)/&map_size - 0.5;
-            let y = 0.5 - TileSystem::clip(pixel_y as f64, 0., &map_size - 1.)/&map_size;
+            let x = TileSystem::clip(pixel_x as f64, 0., &map_size - 1.) / &map_size - 0.5;
+            let y = 0.5 - TileSystem::clip(pixel_y as f64, 0., &map_size - 1.) / &map_size;
             let latitude = 90. - 360. * ((-y * 2. * PI).exp().atan()) / PI;
             (latitude, 360. * x)
         }
@@ -99,7 +119,7 @@ pub mod tiles_system {
 
         /// Converts a QuadKey into tile XY coordinates.
         pub fn quad_key2tile_xy(quad_key: String) -> (usize, usize, u8) {
-            let  (mut tile_x, mut tile_y) = (0, 0);
+            let (mut tile_x, mut tile_y) = (0, 0);
             let levels = quad_key.len();
             for i in (1..=levels).rev() {
                 let mask = 1 << (i - 1);
