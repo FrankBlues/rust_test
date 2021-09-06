@@ -1,13 +1,14 @@
 extern crate image;
 use image::ImageBuffer;
+use std::path::Path;
 
 /// Merge all map tiles within a square extent
 /// 修改成并行
 ///
-pub fn merge_tiles(
+pub fn merge_tiles<T: AsRef<Path>>(
     tile0: (usize, usize),
     tile1: (usize, usize),
-    merged_file: &str,
+    merged_file: T,
     tile_dir: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (tile_x_s, tile_y_s) = (tile0.0 as u32, tile0.1 as u32);
@@ -43,5 +44,34 @@ pub fn merge_tiles(
     }
 
     merged.save(merged_file).unwrap();
+    Ok(())
+}
+
+pub fn write_one_tile<T: AsRef<Path>>(
+    merged: & mut image::RgbImage,
+    tile_x: u32, tile_y: u32,
+    tile_x_s: u32, tile_y_s: u32,
+    tile_dir: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let img_path = tile_dir
+        .join(tile_x.to_string())
+        .join(tile_y.to_string() + ".jpeg");
+    if !img_path.is_file() {
+        panic!(
+            "Warning: file ({}) not exist, pass to the next.",
+            img_path.to_str().unwrap()
+        );
+    }
+    let img = image::open(&img_path).unwrap().to_rgb8();
+    for (x, y, pixel) in img.enumerate_pixels() {
+        // 计算对应合并后的位置
+        // let dst_pixel = merged.get_pixel_mut((tile_x-start_x) * 256 + x, (tile_y - start_y) * 256 + y);
+        // *dst_pixel = *pixel;
+        merged.put_pixel(
+            (tile_x - tile_x_s) * 256 + x,
+            (tile_y - tile_y_s) * 256 + y,
+            *pixel,
+        );
+    }
     Ok(())
 }

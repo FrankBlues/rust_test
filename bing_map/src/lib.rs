@@ -1,3 +1,6 @@
+use std::path::Path;
+use std::time::SystemTime;
+
 mod bing_tiles_system;
 pub use crate::bing_tiles_system::tiles_system::TileSystem;
 
@@ -69,6 +72,95 @@ mod tests {
         assert_eq!(TileSystem::quad_key2tile_xy(String::from("3")), (1, 1, 1));
     }
 }
+
+/// Parse the input parameters.
+pub struct Config {
+    lon0: f64,
+    lat0: f64,
+    lon1: f64,
+    lat1: f64,
+    zoom: u8,
+    tiles_dir: String,
+    out_png: String,
+}
+
+impl Config {
+    pub fn new (matches: clap::ArgMatches) -> Result<Config, &'static str> {
+        let (mut lon0, mut lat0) = (0., 0.);
+        if let Some(ul_lonlat) = matches.value_of("ul_lonlat") {
+            let mut lonlat0 = ul_lonlat.trim().split_whitespace();
+            lon0 = lonlat0.next()
+                    .expect("Failed parsing ul_lonlat")
+                    .parse().expect("Failed parsing lon0 from ul_lonlat.");
+            lat0 = lonlat0.next()
+                        .expect("Failed parsing ul_lonlat")
+                        .parse().expect("Failed parsing lat0 from ul_lonlat.");
+        }
+        let (mut lon1, mut lat1) = (0., 0.);
+        if let Some(br_lonlat) = matches.value_of("br_lonlat") {
+            let mut lonlat1 = br_lonlat.trim().split_whitespace();
+            lon1 = lonlat1.next()
+                    .expect("Failed parsing br_lonlat")
+                    .parse().expect("Failed parsing lon1 from br_lonlat.");
+            lat1 = lonlat1.next()
+                    .expect("Failed parsing br_lonlat")
+                    .parse().expect("Failed parsing lat1 from br_lonlat.");
+        }
+        let mut zoom: u8 = 18;
+        if let Some(z) = matches.value_of("zoom_level") {
+            println!("{}", z);
+            zoom = z.trim().parse().unwrap();
+        }
+        let mut tiles_dir = String::new();
+        if let Some(tile_dir) = matches.value_of("tiles_dir") {
+            tiles_dir = String::from(tile_dir);
+        }
+        let mut out_png = String::new();
+        if let Some(output) = matches.value_of("output") {
+            out_png = String::from(output);
+        }
+
+        Ok(Config {
+            lon0, lat0, lon1, lat1, zoom, tiles_dir, out_png
+        })
+    }
+}
+
+/// Main program to run.
+pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+
+    let level = config.zoom;
+    let tile_dir = Path::new(&config.tiles_dir).join((&level).to_string());
+    let out_png = config.out_png;
+    let world_file = out_png.replace(".png", ".pgw");
+
+    let te = TilesExtent::new(config.lon0, config.lat0, config.lon1, config.lat1, level);
+    let urls_files = te.construct_download_params(&tile_dir);
+    let (tile0, tile1) = te.tile_extent();
+    let world_file_content = te.gen_world_file_content(&tile0);
+
+    //download concurrently
+    println!("Download start!");
+    let st_time = SystemTime::now();
+    download_util::download_files_async(&urls_files).await;
+    let lt_time = SystemTime::now();
+    println!(
+        "{} tiles downloaded, spend {:?}",
+        &urls_files.len(),
+        SystemTime::duration_since(&lt_time, st_time).unwrap()
+    );
+
+    println!("Merging the tiles.");
+    merge_tiles(tile0, tile1, out_png, &tile_dir)?;
+
+    println!("Generate world file.");
+    write_string_to_text(&world_file, world_file_content)?;
+
+    Ok(())
+}
+
+
+
 
 pub struct TilesExtent {
     lon0: f64,

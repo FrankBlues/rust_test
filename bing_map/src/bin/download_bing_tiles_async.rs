@@ -1,11 +1,5 @@
-use std::path::Path;
-use std::time::SystemTime;
-
-use bing_map::download_util::download_files_async;
-use bing_map::TilesExtent;
-// use bing_map::download_util::download_files_async1;
-use bing_map::merge_tiles;
-use bing_map::write_string_to_text;
+use std::process;
+use bing_map::{Config, run};
 
 use tokio;
 
@@ -19,44 +13,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .author("author")
         .about("Does awesome things")
         .arg(Arg::with_name("ul_lonlat")
-            .short("ul")
+            .short("u")
             .long("ul_lonlat")
-            .value_name("")
-            .help("Sets a custom config file")
-            .takes_value(true))
+            .value_name("116.177641 39.924175")
+            .default_value("116.177641 39.924175")
+            .help("Coordinats of the upper left corner.")
+            .takes_value(true)
+            .required(true))
+        .arg(Arg::with_name("br_lonlat")
+            .short("b")
+            .long("br_lonlat")
+            .value_name("116.183095 39.921244")
+            .default_value("116.183095 39.921244")
+            .help("Coordinats of the bottom right corner.")
+            .takes_value(true)
+            .required(true))
+        .arg(Arg::with_name("zoom_level")
+            .short("z")
+            .long("zoom")
+            .value_name("18")
+            .default_value("15")
+            .help("The zoom level.")
+            .takes_value(true)
+            .required(true))
+        .arg(Arg::with_name("tiles_dir")
+            .short("d")
+            .long("tiles_dir")
+            .default_value(".")
+            .help("The downloaded tiles directory.")
+            .takes_value(true)
+            .required(true))
+        .arg(Arg::with_name("output")
+            .short("o")
+            .long("output")
+            .value_name("./out.png")
+            .help("The output merged image.")
+            .takes_value(true)
+            .required(true))
         .get_matches();
 
-    if let Some(c) = matches.value_of("ul_lonlat") {
-        println!("Value for config: {}", c);
+    
+    let config = Config::new(matches)?;
+    if let Err(e) = run(config).await {
+        eprintln!("Application error: {}", e);
+        process::exit(1);
     }
-    let (lon0, lat0) = (116.177641, 39.924175);
-    let (lon1, lat1) = (116.183095, 39.921244);
-    let level = 18;
-    let tile_dir = Path::new("D:/temp11").join((&level).to_string());
-    let out_png = "d:/merged_test.png";
-
-    let world_file = out_png.replace(".png", ".pgw");
-
-    let te = TilesExtent::new(lon0, lat0, lon1, lat1, level);
-    let urls_files = te.construct_download_params(&tile_dir);
-    let (tile0, tile1) = te.tile_extent();
-    let world_file_content = te.gen_world_file_content(&tile0);
-
-    //download concurrently
-    println!("Download start!");
-    let st_time = SystemTime::now();
-    download_files_async(&urls_files).await;
-    let lt_time = SystemTime::now();
-    println!(
-        "{} tiles downloaded, spend {:?}",
-        &urls_files.len(),
-        SystemTime::duration_since(&lt_time, st_time).unwrap()
-    );
-
-    println!("Merging the tiles.");
-    merge_tiles(tile0, tile1, out_png, &tile_dir)?;
-
-    println!("Generate world file.");
-    write_string_to_text(&world_file, world_file_content)?;
+    
     Ok(())
 }
+
