@@ -22,15 +22,15 @@ mod tests {
         assert_eq!(TileSystem::map_size(2), 1024)
     }
 
-    #[test]
-    fn min_test() {
-        assert_eq!(min(2.1, 3.), 2.1)
-    }
+    // #[test]
+    // fn min_test() {
+    //     assert_eq!(min(2.1, 3.), 2.1)
+    // }
 
-    #[test]
-    fn max_test() {
-        assert_eq!(max(2.1, 3.), 3.)
-    }
+    // #[test]
+    // fn max_test() {
+    //     assert_eq!(max(2.1, 3.), 3.)
+    // }
 
     #[test]
     fn res_test() {
@@ -71,9 +71,49 @@ mod tests {
         assert_eq!(TileSystem::quad_key2tile_xy(String::from("21")), (1, 2, 2));
         assert_eq!(TileSystem::quad_key2tile_xy(String::from("3")), (1, 1, 1));
     }
+
+    #[test]
+    fn image_merge_threadpool_test() {
+        assert_eq!(
+            merge_tiles(
+                (107806, 49644),
+                (107824, 49668),
+                "d:/image_merge_test.png",
+                &Path::new("D:\\temp11\\bing_17\\17")
+            )
+            .unwrap(),
+            ()
+        )
+    }
+    #[test]
+    fn image_merge_single_thread_test() {
+        assert_eq!(
+            image_process::merge_tiles1(
+                (107806, 49644),
+                (107824, 49668),
+                "d:/image_merge_test.png",
+                &Path::new("D:\\temp11\\bing_17\\17")
+            )
+            .unwrap(),
+            ()
+        )
+    }
+    #[test]
+    fn image_merge_spawn_test() {
+        assert_eq!(
+            image_process::merge_tiles2(
+                (107806, 49644),
+                (107824, 49668),
+                "d:/image_merge_test.png",
+                &Path::new("D:\\temp11\\bing_17\\17")
+            )
+            .unwrap(),
+            ()
+        )
+    }
 }
 
-/// Parse the input parameters.
+/// Parse the input parameters into this struct.
 pub struct Config {
     lon0: f64,
     lat0: f64,
@@ -85,30 +125,38 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new (matches: clap::ArgMatches) -> Result<Config, &'static str> {
+    /// Parse the input arguments passed in by clap.
+    pub fn new(matches: clap::ArgMatches) -> Result<Config, &'static str> {
         let (mut lon0, mut lat0) = (0., 0.);
         if let Some(ul_lonlat) = matches.value_of("ul_lonlat") {
             let mut lonlat0 = ul_lonlat.trim().split_whitespace();
-            lon0 = lonlat0.next()
-                    .expect("Failed parsing ul_lonlat")
-                    .parse().expect("Failed parsing lon0 from ul_lonlat.");
-            lat0 = lonlat0.next()
-                        .expect("Failed parsing ul_lonlat")
-                        .parse().expect("Failed parsing lat0 from ul_lonlat.");
+            lon0 = lonlat0
+                .next()
+                .expect("Failed parsing ul_lonlat")
+                .parse()
+                .expect("Failed parsing lon0 from ul_lonlat.");
+            lat0 = lonlat0
+                .next()
+                .expect("Failed parsing ul_lonlat")
+                .parse()
+                .expect("Failed parsing lat0 from ul_lonlat.");
         }
         let (mut lon1, mut lat1) = (0., 0.);
         if let Some(br_lonlat) = matches.value_of("br_lonlat") {
             let mut lonlat1 = br_lonlat.trim().split_whitespace();
-            lon1 = lonlat1.next()
-                    .expect("Failed parsing br_lonlat")
-                    .parse().expect("Failed parsing lon1 from br_lonlat.");
-            lat1 = lonlat1.next()
-                    .expect("Failed parsing br_lonlat")
-                    .parse().expect("Failed parsing lat1 from br_lonlat.");
+            lon1 = lonlat1
+                .next()
+                .expect("Failed parsing br_lonlat")
+                .parse()
+                .expect("Failed parsing lon1 from br_lonlat.");
+            lat1 = lonlat1
+                .next()
+                .expect("Failed parsing br_lonlat")
+                .parse()
+                .expect("Failed parsing lat1 from br_lonlat.");
         }
         let mut zoom: u8 = 18;
         if let Some(z) = matches.value_of("zoom_level") {
-            println!("{}", z);
             zoom = z.trim().parse().unwrap();
         }
         let mut tiles_dir = String::new();
@@ -121,14 +169,19 @@ impl Config {
         }
 
         Ok(Config {
-            lon0, lat0, lon1, lat1, zoom, tiles_dir, out_png
+            lon0,
+            lat0,
+            lon1,
+            lat1,
+            zoom,
+            tiles_dir,
+            out_png,
         })
     }
 }
 
 /// Main program to run.
 pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
-
     let level = config.zoom;
     let tile_dir = Path::new(&config.tiles_dir).join((&level).to_string());
     let out_png = config.out_png;
@@ -151,7 +204,13 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("Merging the tiles.");
-    merge_tiles(tile0, tile1, out_png, &tile_dir)?;
+    let st_time = SystemTime::now();
+    image_process::merge_tiles(tile0, tile1, out_png, &tile_dir)?;
+    let lt_time = SystemTime::now();
+    println!(
+        "tiles merged, spend {:?}",
+        SystemTime::duration_since(&lt_time, st_time).unwrap()
+    );
 
     println!("Generate world file.");
     write_string_to_text(&world_file, world_file_content)?;
@@ -159,9 +218,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
-
-
+/// Struct for parsing bing map tiles within the extent defined by input coordinates.
 pub struct TilesExtent {
     lon0: f64,
     lat0: f64,
@@ -182,11 +239,13 @@ impl TilesExtent {
         }
     }
 
+    /// Calculate the tile index from lon/lat coordinate and current zoom level;
     fn tilexy_from_lonlat(lon: f64, lat: f64, zoom: u8) -> (usize, usize) {
         let (_x, _y) = TileSystem::latlon2xy(lat, lon, zoom);
         TileSystem::xy2tile_xy(_x, _y)
     }
 
+    /// Return the upper left tile index and the bottom right tile index.
     pub fn tile_extent(&self) -> ((usize, usize), (usize, usize)) {
         // upper left tile number
         let ul_tile = TilesExtent::tilexy_from_lonlat(self.lon0, self.lat0, self.zoom);
@@ -195,11 +254,13 @@ impl TilesExtent {
         (ul_tile, br_tile)
     }
 
+    /// Calculate lon/lat coordinate of the upper left corner in a tile.
     pub fn cal_tile_lonlat(tile_x: usize, tile_y: usize, zoom: u8) -> (f64, f64) {
         let (x, y) = TileSystem::tile_xy2xy(tile_x, tile_y);
         TileSystem::xy2latlon(x, y, zoom)
     }
 
+    /// Return all the tiles in a vector within current extent.
     pub fn tiles(&self) -> Vec<(usize, usize)> {
         let mut _tiles: Vec<(usize, usize)> = Vec::new();
         let (ul_tile, br_tile) = self.tile_extent();
@@ -211,6 +272,7 @@ impl TilesExtent {
         _tiles
     }
 
+    /// Convert all tiles in a vector to quad keys.
     fn tiles2quad_keys(&self, tiles: &Vec<(usize, usize)>) -> Vec<String> {
         tiles
             .iter()
@@ -218,14 +280,13 @@ impl TilesExtent {
             .collect()
     }
 
-    /// 计算quad_keys
+    /// Return all the quad_keys within current extent.
     pub fn quad_keys(&self) -> Vec<String> {
         let _tiles = self.tiles();
         self.tiles2quad_keys(&_tiles)
     }
 
-    /// 构建下载参数<url地址, 本地路径>
-    ///
+    /// Construct download params contain the url and output file pairs.
     pub fn construct_download_params(
         &self,
         tile_dir: &std::path::PathBuf,
@@ -247,11 +308,14 @@ impl TilesExtent {
         urls_files
     }
 
-    /// Generate world file content as String.
+    /// Generate world file content.
     pub fn gen_world_file_content(&self, tile: &(usize, usize)) -> String {
         let (lat, lon) = TilesExtent::cal_tile_lonlat(tile.0, tile.1, self.zoom);
         let (mercator_x, mercator_y) = TileSystem::latlon2mercator(lat, lon);
         let res = TileSystem::ground_resolution(0., self.zoom);
-        format!("{:.7}\n0\n0\n{:.7}\n{:.7}\n{:.7}", res, -res, mercator_x, mercator_y)
+        format!(
+            "{:.7}\n0\n0\n{:.7}\n{:.7}\n{:.7}",
+            res, -res, mercator_x, mercator_y
+        )
     }
 }

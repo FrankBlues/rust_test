@@ -49,7 +49,7 @@ pub mod tiles_system {
             let lat = TileSystem::clip(latitude, MIN_LATITUDE, MAX_LATITUDE);
             let long = TileSystem::clip(longitude, MIN_LONGITUDE, MAX_LONGITUDE);
             let x = long * WEB_MERCATOR_R / 180.;
-            let y = ((90.0 + lat) * PI / 360.).tan().ln()/(PI / 180.);
+            let y = ((90.0 + lat) * PI / 360.).tan().ln() / (PI / 180.);
             let y = y * WEB_MERCATOR_R / 180.;
             (x, y)
         }
