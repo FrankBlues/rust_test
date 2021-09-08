@@ -17,30 +17,29 @@ fn main() {
 
     let te = TilesExtent::new(lon0, lat0, lon1, lat1, level);
     let urls_files = te.construct_download_params(&tile_dir);
-    for (u, f) in urls_files.iter() {
-        let path = f.to_str().unwrap();
-        if path.contains("215617") {
-            println!("{}: {:?}", u, path);
-        }
-        
-    }
-    // let (tile0, tile1) = te.tile_extent();
-    // let world_file_content = te.gen_world_file_content(&tile0);
+    // for (u, f) in urls_files.iter() {
+    //     let path = f.to_str().unwrap();
+    //     if path.contains("215617") {
+    //         println!("{}: {:?}", u, path);
+    //     }
+    // }
+    let (tile0, tile1) = te.tile_extent();
+    let world_file_content = te.gen_world_file_content(&tile0);
 
-    // // download one by one
-    // println!("Download start!");
-    // let st_time = SystemTime::now();
-    // download_files(&urls_files);
-    // let lt_time = SystemTime::now();
-    // println!(
-    //     "{} tiles downloaded, spend {:?}",
-    //     &urls_files.len(),
-    //     SystemTime::duration_since(&lt_time, st_time).unwrap()
-    // );
+    // download one by one
+    println!("Download start!");
+    let st_time = SystemTime::now();
+    download_files(&urls_files);
+    let lt_time = SystemTime::now();
+    println!(
+        "{} tiles downloaded, spend {:?}",
+        &urls_files.len(),
+        SystemTime::duration_since(&lt_time, st_time).unwrap()
+    );
 
-    // println!("Merging the tiles.");
-    // merge_tiles(tile0, tile1, out_png, &tile_dir).unwrap();
+    println!("Merging the tiles.");
+    merge_tiles(tile0, tile1, out_png, &tile_dir).unwrap();
 
-    // println!("Generate world file.");
-    // write_string_to_text(&world_file, world_file_content).unwrap();
+    println!("Generate world file.");
+    write_string_to_text(&world_file, world_file_content).unwrap();
 }
