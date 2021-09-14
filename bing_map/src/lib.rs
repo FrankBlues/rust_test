@@ -122,6 +122,7 @@ pub struct Config {
     zoom: u8,
     tiles_dir: String,
     out_png: String,
+    only_merge: String,
 }
 
 impl Config {
@@ -167,6 +168,10 @@ impl Config {
         if let Some(output) = matches.value_of("output") {
             out_png = String::from(output);
         }
+        let mut only_merge = String::new();
+        if let Some(merge) = matches.value_of("only_merge") {
+            only_merge = String::from(merge);
+        }
 
         Ok(Config {
             lon0,
@@ -176,6 +181,7 @@ impl Config {
             zoom,
             tiles_dir,
             out_png,
+            only_merge,
         })
     }
 }
@@ -192,16 +198,18 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let (tile0, tile1) = te.tile_extent();
     let world_file_content = te.gen_world_file_content(&tile0);
 
-    //download concurrently
-    println!("Download start!");
-    let st_time = SystemTime::now();
-    download_util::download_files_async(&urls_files).await;
-    let lt_time = SystemTime::now();
-    println!(
-        "{} tiles downloaded, spend {:?}",
-        &urls_files.len(),
-        SystemTime::duration_since(&lt_time, st_time).unwrap()
-    );
+    if config.only_merge == String::from("false") {
+        //download concurrently
+        println!("Download start!");
+        let st_time = SystemTime::now();
+        download_util::download_files_async(&urls_files).await;
+        let lt_time = SystemTime::now();
+        println!(
+            "{} tiles downloaded, spend {:?}",
+            &urls_files.len(),
+            SystemTime::duration_since(&lt_time, st_time).unwrap()
+        );
+    }
 
     println!("Merging the tiles.");
     let st_time = SystemTime::now();

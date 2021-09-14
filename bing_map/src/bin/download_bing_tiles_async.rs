@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = App::new("bing map")
         .version("0.1.0")
         .author("menglimeng")
-        .about("Download bing map tile within the designated extent and merged all the tiles to one image(.png) with the world file(.pnw).")
+        .about("Download bing map tile within an extent and merging all the tiles to one image(.png), also generate the world file(.pnw).")
         .arg(
             Arg::with_name("ul_lonlat")
                 .short("u")
@@ -59,6 +59,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .help("The output merged image.")
                 .takes_value(true)
                 .required(true)
+        )
+        .arg(
+            Arg::with_name("only_merge")
+                .short("m")
+                .long("only_merge")
+                .value_name("false")
+                .help("Only merge tiles,donot download [true, false].")
+                .takes_value(true)
+                .required(false)
         )
         .get_matches();
 
