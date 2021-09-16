@@ -13,6 +13,7 @@ pub fn merge_tiles<T: AsRef<Path>>(
     tile1: (usize, usize),
     merged_file: T,
     tile_dir: &std::path::Path,
+    tile_ext: &String
 ) -> Result<(), Box<dyn std::error::Error>> {
     let pool = ThreadPool::new(8);
     let (tile_x_s, tile_y_s) = (tile0.0 as u32, tile0.1 as u32);
@@ -26,7 +27,7 @@ pub fn merge_tiles<T: AsRef<Path>>(
         for tile_y in tile_y_s..=tile_y_e {
             let img_path = tile_dir
                 .join(tile_x.to_string())
-                .join(tile_y.to_string() + ".jpeg");
+                .join(tile_y.to_string() + tile_ext);
             if !img_path.is_file() {
                 println!("Warning: file ({}) not exist", img_path.to_str().unwrap());
                 continue;

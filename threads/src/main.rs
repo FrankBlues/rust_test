@@ -3,8 +3,12 @@ use std::time::Duration;
 
 use std::sync::mpsc;
 use std::sync::{Mutex, Arc};
+use threadpool::ThreadPool;
+use std::sync::atomic::AtomicUsize;
 
 use std::rc::Rc;
+
+use std::time::SystemTime;
 fn main() {
     // new thread  spawn join
     // A JoinHandle is an owned value that, when we call the join method on it, will wait for its thread to finish
@@ -91,23 +95,63 @@ fn main() {
     // println!("m = {:?}", m);
     
     // Atomic Reference Counting with Arc<T>
-    let counter = Arc::new(Mutex::new(0));
-    let mut handles = vec![];
+    // let counter = Arc::new(Mutex::new(0));
+    // let mut handles = vec![];
 
-    for _ in 0..10 {
-        let counter = Arc::clone(&counter);
-        let handle = thread::spawn(move || {
-            let mut num = counter.lock().unwrap();
+    // for _ in 0..10 {
+    //     let counter = Arc::clone(&counter);
+    //     let handle = thread::spawn(move || {
+    //         let mut num = counter.lock().unwrap();
 
-            *num += 1;
+    //         *num += 1;
+    //     });
+    //     handles.push(handle);
+    // }
+
+    // for handle in handles {
+    //     handle.join().unwrap();
+    // }
+
+    // println!("Result: {}", *counter.lock().unwrap());
+
+    let pool = ThreadPool::new(100);
+    // let pool = ThreadPool::with_name("worker".into(), 2);
+    let vec = vec![String::from("hello"), String::from("world"), String::from("foo"), String::from("bar")];
+
+    let st_time = SystemTime::now();
+    // let mut vec1 = vec![0; 2000000];
+    let vec1 = Arc::new(Mutex::new(vec![0; 2000000]));
+    // for i in 0..2000000 {
+    //     let x_ptr = vec1.as_mut_ptr();
+    //     unsafe {
+    //         *x_ptr.add(i) = i;
+    //     }
+    // }
+    
+    for i in 0..2000000 {
+        let vec = Arc::clone(&vec1);
+        
+        pool.execute(move || {
+            let mut v = vec.lock().unwrap();
+            let x_ptr = v.as_mut_ptr();
+            unsafe {
+                *x_ptr.add(i) = i;
+            }
+            // v[i] = i;
         });
-        handles.push(handle);
     }
-
-    for handle in handles {
-        handle.join().unwrap();
-    }
-
-    println!("Result: {}", *counter.lock().unwrap());
+    pool.join();
+    // println!("{}", vec1[1000]);
+    println!("{}", vec1.lock().unwrap()[1000]);
+    let ed_time = SystemTime::now();
+    println!("{:?}", SystemTime::duration_since(&ed_time, st_time).unwrap())
+    // for v in vec {
+    //     pool.execute(move || {println!("{}", v)});
+    // }
+    // pool.execute(|| println!("hello"));
+    // pool.execute(|| println!("world"));
+    // pool.execute(|| println!("foo"));
+    // pool.execute(|| println!("bar"));
+    // pool.join();
 
 }

@@ -14,9 +14,10 @@ fn main() {
     let out_png = "d:/merged_test.png";
 
     let world_file = out_png.replace(".png", ".pgw");
+    let tile_ext = String::from(".jpeg");
 
     let te = TilesExtent::new(lon0, lat0, lon1, lat1, level);
-    let urls_files = te.construct_download_params(&tile_dir);
+    let urls_files = te.construct_download_params(&tile_dir, &tile_ext);
     // for (u, f) in urls_files.iter() {
     //     let path = f.to_str().unwrap();
     //     if path.contains("215617") {
@@ -38,7 +39,7 @@ fn main() {
     );
 
     println!("Merging the tiles.");
-    merge_tiles(tile0, tile1, out_png, &tile_dir).unwrap();
+    merge_tiles(tile0, tile1, out_png, &tile_dir, &tile_ext).unwrap();
 
     println!("Generate world file.");
     write_string_to_text(&world_file, world_file_content).unwrap();

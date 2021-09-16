@@ -123,14 +123,15 @@ pub struct Config {
     tiles_dir: String,
     out_png: String,
     only_merge: String,
+    tile_extension: String,
 }
 
 impl Config {
     /// Parse the input arguments passed in by clap.
     pub fn new(matches: clap::ArgMatches) -> Result<Config, &'static str> {
         let (mut lon0, mut lat0) = (0., 0.);
-        if let Some(ul_lonlat) = matches.value_of("ul_lonlat") {
-            let mut lonlat0 = ul_lonlat.trim().split_whitespace();
+        if let Some(param) = matches.value_of("ul_lonlat") {
+            let mut lonlat0 = param.trim().split_whitespace();
             lon0 = lonlat0
                 .next()
                 .expect("Failed parsing ul_lonlat")
@@ -143,8 +144,8 @@ impl Config {
                 .expect("Failed parsing lat0 from ul_lonlat.");
         }
         let (mut lon1, mut lat1) = (0., 0.);
-        if let Some(br_lonlat) = matches.value_of("br_lonlat") {
-            let mut lonlat1 = br_lonlat.trim().split_whitespace();
+        if let Some(param) = matches.value_of("br_lonlat") {
+            let mut lonlat1 = param.trim().split_whitespace();
             lon1 = lonlat1
                 .next()
                 .expect("Failed parsing br_lonlat")
@@ -157,20 +158,24 @@ impl Config {
                 .expect("Failed parsing lat1 from br_lonlat.");
         }
         let mut zoom: u8 = 18;
-        if let Some(z) = matches.value_of("zoom_level") {
-            zoom = z.trim().parse().unwrap();
+        if let Some(param) = matches.value_of("zoom_level") {
+            zoom = param.trim().parse().unwrap();
         }
         let mut tiles_dir = String::new();
-        if let Some(tile_dir) = matches.value_of("tiles_dir") {
-            tiles_dir = String::from(tile_dir);
+        if let Some(param) = matches.value_of("tiles_dir") {
+            tiles_dir = String::from(param);
         }
         let mut out_png = String::new();
-        if let Some(output) = matches.value_of("output") {
-            out_png = String::from(output);
+        if let Some(param) = matches.value_of("output") {
+            out_png = String::from(param);
         }
         let mut only_merge = String::new();
-        if let Some(merge) = matches.value_of("only_merge") {
-            only_merge = String::from(merge);
+        if let Some(param) = matches.value_of("only_merge") {
+            only_merge = String::from(param);
+        }
+        let mut tile_extension = String::new();
+        if let Some(param) = matches.value_of("tile_ext") {
+            tile_extension = String::from(param);
         }
 
         Ok(Config {
@@ -182,6 +187,7 @@ impl Config {
             tiles_dir,
             out_png,
             only_merge,
+            tile_extension
         })
     }
 }
@@ -194,7 +200,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let world_file = out_png.replace(".png", ".pgw");
 
     let te = TilesExtent::new(config.lon0, config.lat0, config.lon1, config.lat1, level);
-    let urls_files = te.construct_download_params(&tile_dir);
+    let urls_files = te.construct_download_params(&tile_dir, &config.tile_extension);
     let (tile0, tile1) = te.tile_extent();
     let world_file_content = te.gen_world_file_content(&tile0);
 
@@ -213,7 +219,7 @@ pub async fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Merging the tiles.");
     let st_time = SystemTime::now();
-    image_process::merge_tiles(tile0, tile1, out_png, &tile_dir)?;
+    image_process::merge_tiles(tile0, tile1, out_png, &tile_dir, &config.tile_extension)?;
     let lt_time = SystemTime::now();
     println!(
         "tiles merged, spend {:?}",
@@ -298,6 +304,7 @@ impl TilesExtent {
     pub fn construct_download_params(
         &self,
         tile_dir: &std::path::PathBuf,
+        tile_extension: &String
     ) -> Vec<(String, std::path::PathBuf)> {
         let tiles = self.tiles();
         let quad_keys = self.tiles2quad_keys(&tiles);
@@ -307,7 +314,7 @@ impl TilesExtent {
         for (i, (x, y)) in tiles.iter().enumerate() {
             let q = &quad_keys[i];
             let url = download_util::constuct_url(q, "a");
-            let path = tile_dir.join(x.to_string()).join(y.to_string() + ".jpeg");
+            let path = tile_dir.join(x.to_string()).join(y.to_string() + tile_extension);
             if !path.parent().unwrap().exists() {
                 std::fs::create_dir_all(&path.parent().unwrap()).unwrap();
             }

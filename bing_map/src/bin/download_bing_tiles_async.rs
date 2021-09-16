@@ -69,6 +69,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .takes_value(true)
                 .required(false)
         )
+        .arg(
+            Arg::with_name("tile_ext")
+                .short("e")
+                .long("tile_ext")
+                .default_value(".jpeg")
+                .value_name(".jpeg")
+                .help("Tile file extention(.png, .jpg, .jpeg).")
+                .takes_value(true)
+                .required(false)
+        )
         .get_matches();
 
     let config = Config::new(matches)?;
