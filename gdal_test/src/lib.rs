@@ -1,8 +1,10 @@
 use gdal::raster::{Buffer, GdalType, RasterBand};
-use gdal::{Dataset, Driver, Metadata};
-use gdal_sys::GDALDataType;
+use gdal::{Dataset, Driver};
 use std::path::Path;
-use ndarray::{s, Array2, Zip};
+use ndarray::{s, Array2, Zip, ArcArray, Dim};
+
+use threadpool::ThreadPool;
+use std::sync::{Mutex, Arc};
 
 // #[cfg(feature = "ndarray")]
 #[cfg(test)]
@@ -364,6 +366,7 @@ pub struct Config {
     r: u8,
     g: u8,
     b: u8,
+    n_threads: usize,
 }
 
 impl Config {
@@ -400,6 +403,10 @@ impl Config {
                 .parse()
                 .expect("Failed parsing b from rgb.");
         }
+        let mut n_threads: usize = 0;
+        if let Some(param) = matches.value_of("n_threads") {
+            n_threads = param.trim().parse().unwrap();
+        }
 
         Ok(Config {
             in_raster,
@@ -408,6 +415,7 @@ impl Config {
             r,
             g,
             b,
+            n_threads,
         })
     }
 }
@@ -552,4 +560,174 @@ pub fn gray2rgb<T: GdalType + Copy + PartialEq + Into<f64>>(
         new_rb.write((0, 0), (x_size, y_size), &rb_data_new).unwrap();
     }
     Ok(())
+}
+
+pub fn run1(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+    let in_raster = config.in_raster;
+    let out_raster = config.out_raster;
+
+    // let val_value: f64 = config.valid_value;
+    let val_value: u8 = config.valid_value as u8;
+    let (r, g, b) = (config.r, config.g, config.b);
+    let ds = Dataset::open(Path::new(&in_raster)).expect("Open the input raster fail!");
+    let count = ds.raster_count();
+    if count != 1 {
+        println!("Warning: input raster has more than 1 ({}) band", &count);
+        println!("Try using the first band.");
+    }
+    let rb = ds
+        .rasterband(1)
+        .expect("Fetch the first band of the input fail!");
+    // let (x_size, y_size) = ds.raster_size();
+    // let dtype = rb.band_type();
+    let (x_size, y_size) = ds.raster_size();
+
+    let (block_x, block_y) = rb.block_size();
+    let (x_remain, _) = rb.actual_block_size(((x_size / block_x) as isize, 0)).unwrap();
+    let (_, y_remain) = rb.actual_block_size((0, (y_size / block_y) as isize)).unwrap();
+    type T = u8;
+
+    let array = Array2::<T>::zeros((y_size, x_size));
+    let array_g = array.clone();
+    let array_b = array.clone();
+
+    let array_r = Arc::new(Mutex::new(array.to_shared()));
+    let array_g = Arc::new(Mutex::new(array_g.to_shared()));
+    let array_b = Arc::new(Mutex::new(array_b.to_shared()));
+
+    let pool = ThreadPool::new(config.n_threads);
+    for x in 0..=x_size / block_x {
+        for y in 0..=y_size / block_y {
+            let arr_r = Arc::clone(&array_r);
+            let arr_g = Arc::clone(&array_g);
+            let arr_b = Arc::clone(&array_b);
+            let block_arr: Array2<T> = rb.read_block((x, y)).unwrap();
+            
+            pool.execute(move || {
+                write_block_thread(block_arr, x, y, x_size, y_size, block_x, block_y,
+                    x_remain, y_remain, arr_r, arr_g, arr_b,
+                    val_value, r, g, b);
+            });
+            
+        }
+    }
+    pool.join();
+
+    let buffer_r = Buffer::new((x_size, y_size), array_r.lock().unwrap().to_owned().into_raw_vec());
+    let buffer_g = Buffer::new((x_size, y_size), array_g.lock().unwrap().to_owned().into_raw_vec());
+    let buffer_b = Buffer::new((x_size, y_size), array_b.lock().unwrap().to_owned().into_raw_vec());
+
+    use std::thread;
+    // Output
+    println!("Writing images");
+    {
+        let driver = Driver::get("GTiff").unwrap();
+        let mut new_ds = driver
+            .create_with_band_type::<T>(&out_raster, rb.x_size() as isize, rb.y_size() as isize, 3)
+            .unwrap();
+        new_ds
+            .set_geo_transform(&ds.geo_transform().unwrap())
+            .unwrap();
+        new_ds.set_spatial_ref(&ds.spatial_ref().unwrap()).unwrap();
+
+        let new_ds = Arc::new(Mutex::new(new_ds));
+
+        let b1 = Arc::clone(&new_ds);
+        let b2 = Arc::clone(&new_ds);
+        let b3 = Arc::clone(&new_ds);
+        let mut handls = vec![];
+        let jh1 = thread::spawn(move || {
+            let ds = b1.lock().unwrap();
+            let mut new_rb = ds.rasterband(1).unwrap();
+            new_rb.set_no_data_value(0.).unwrap();
+            new_rb.write((0, 0), (x_size, y_size), &buffer_r).unwrap();
+        });
+        handls.push(jh1);
+        let jh2 = thread::spawn(move || {
+            let ds = b2.lock().unwrap();
+            let mut new_rb = ds.rasterband(2).unwrap();
+            new_rb.set_no_data_value(0.).unwrap();
+            new_rb.write((0, 0), (x_size, y_size), &buffer_g).unwrap();
+        });
+        handls.push(jh2);
+        let jh3 = thread::spawn(move || {
+            let ds = b3.lock().unwrap();
+            let mut new_rb = ds.rasterband(3).unwrap();
+            new_rb.set_no_data_value(0.).unwrap();
+            new_rb.write((0, 0), (x_size, y_size), &buffer_b).unwrap();
+        });
+        handls.push(jh3);
+        for h in handls {
+            h.join().unwrap();
+        }
+    }
+
+    Ok(())
+}
+
+pub fn write_block_thread<T: Copy + PartialEq + Into<f64>>(block_arr: Array2<T>,
+    x: usize, y: usize, x_size: usize, y_size: usize, block_x: usize, block_y: usize,
+    x_remain: usize, y_remain: usize,
+    array_r: Arc<Mutex<ArcArray<u8, Dim<[usize; 2]>>>>, array_g: Arc<Mutex<ArcArray<u8, Dim<[usize; 2]>>>>, array_b: Arc<Mutex<ArcArray<u8, Dim<[usize; 2]>>>>,
+    val_value: T, r: u8, g: u8, b: u8) {
+
+        let mut r_arr = array_r.lock().unwrap();
+        let mut g_arr = array_g.lock().unwrap();
+        let mut b_arr = array_b.lock().unwrap();
+
+        write_block(block_arr, x, y, x_size, y_size, block_x, block_y, x_remain, y_remain, &mut r_arr, &mut g_arr, &mut b_arr, val_value, r, g, b);
+    }
+
+pub fn write_block<T: Copy + PartialEq + Into<f64>>(mut block_arr: Array2<T>,
+    x: usize, y: usize, x_size: usize, y_size: usize, block_x: usize, block_y: usize,
+    x_remain: usize, y_remain: usize,
+    array_r: &mut ArcArray<u8, Dim<[usize; 2]>>, array_g: &mut ArcArray<u8, Dim<[usize; 2]>>, array_b: &mut ArcArray<u8, Dim<[usize; 2]>>,
+    val_value: T, r: u8, g: u8, b: u8) {
+    // block index
+    let block_x_e = block_x * (x + 1);
+    let block_y_e = block_y * (y + 1);
+    let end_x = if block_x_e >= x_size {
+        x_size
+    } else {
+        block_x_e
+    };
+    let end_y = if block_y_e >= y_size {
+        y_size
+    } else {
+        block_y_e
+    };
+    if block_x_e >= x_size && !(block_y_e >= y_size) {
+        block_arr = block_arr.slice(s!(0..block_y, 0..x_remain)).to_owned();
+    }
+    if block_x_e < x_size && block_y_e >= y_size {
+        block_arr = block_arr.slice(s!(0..y_remain, 0..block_x)).to_owned();
+    }
+    if block_x_e >= x_size && block_y_e >= y_size {
+        block_arr = block_arr.slice(s!(0..y_remain, 0..x_remain)).to_owned();
+    }
+
+    // let (index0, index1) = (y * block_y..end_y, x * block_x..end_x);
+    let mut slice = array_r.slice_mut(s!(y * block_y..end_y, x * block_x..end_x));
+    let mut slice_g = array_g.slice_mut(s!(y * block_y..end_y, x * block_x..end_x));
+    let mut slice_b = array_b.slice_mut(s!(y * block_y..end_y, x * block_x..end_x));
+    // break;
+
+    Zip::from(&mut slice).and(&block_arr).for_each(|a, &bb| {
+        if bb == val_value {
+            *a = r;
+        }
+    });
+
+    // let block_arr = block_arr.clone();
+    Zip::from(&mut slice_g).and(&block_arr).for_each(|a, &bb| {
+        if bb == val_value {
+            *a = g;
+        }
+    });
+
+    Zip::from(&mut slice_b).and(&block_arr).for_each(|a, &bb| {
+        if bb == val_value {
+            *a = b;
+        }
+    });
 }
