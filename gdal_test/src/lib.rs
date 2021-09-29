@@ -6,6 +6,13 @@ use ndarray::{s, Array2, Zip, ArcArray, Dim};
 use threadpool::ThreadPool;
 use std::sync::{Mutex, Arc};
 
+mod rtree;
+pub use rtree::{ImageBoundary, ParamsFindIntersected, run_find_intersected};
+
+mod io_utils;
+pub use io_utils::{get_files, write_vec_to_text, check_parent_dir};
+
+
 // #[cfg(feature = "ndarray")]
 #[cfg(test)]
 mod tests {
@@ -358,6 +365,34 @@ mod tests {
     }
 }
 
+/// return the raster boundary [left, bottom, right, top]
+pub fn raster_boundary(geo_transform: &[f64; 6], raster_size: &(usize, usize)) -> [f64; 4] {
+
+    let res = geo_transform[1];
+    let bottom = geo_transform[3] - res * (raster_size.1 as f64);
+    let right = geo_transform[0] + res * (raster_size.0 as f64);
+
+    [geo_transform[0], bottom, right, geo_transform[3]]
+}
+
+
+pub fn xy2pixel_xy(x: f64, y: f64, geo_transform: &[f64; 6]) -> (usize, usize) {
+    let res = geo_transform[1];
+    (
+        ((x - geo_transform[0]) / res) as usize,
+        ((geo_transform[3] - y) / res) as usize,
+    )
+}
+
+pub fn pixel_xy2xy(pixel_x: usize, pixel_y: usize, geo_transform: &[f64; 6]) -> (f64, f64) {
+    let res = geo_transform[1];
+    (
+        geo_transform[0] + (pixel_x as f64) * res,
+        geo_transform[3] - (pixel_y as f64) * res,
+    )
+}
+
+
 /// Parse the input parameters into this struct.
 pub struct Config {
     in_raster: String,
@@ -420,7 +455,7 @@ impl Config {
     }
 }
 
-/// Main program to run.
+/// Main program(gray2rgb) to run.
 pub fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let in_raster = config.in_raster;
     let out_raster = config.out_raster;
@@ -488,22 +523,6 @@ pub fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-pub fn xy2pixel_xy(x: f64, y: f64, geo_transform: &[f64; 6]) -> (usize, usize) {
-    let res = geo_transform[1];
-    (
-        ((x - geo_transform[0]) / res) as usize,
-        ((geo_transform[3] - y) / res) as usize,
-    )
-}
-
-pub fn pixel_xy2xy(pixel_x: usize, pixel_y: usize, geo_transform: &[f64; 6]) -> (f64, f64) {
-    let res = geo_transform[1];
-    (
-        geo_transform[0] + (pixel_x as f64) * res,
-        geo_transform[3] - (pixel_y as f64) * res,
-    )
-}
-
 pub fn gray2rgb<T: GdalType + Copy + PartialEq + Into<f64>>(
     rb: RasterBand,
     out_raster: &str,
@@ -562,6 +581,7 @@ pub fn gray2rgb<T: GdalType + Copy + PartialEq + Into<f64>>(
     Ok(())
 }
 
+/// gray2rgb_block(only u8 type)
 pub fn run1(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let in_raster = config.in_raster;
     let out_raster = config.out_raster;
