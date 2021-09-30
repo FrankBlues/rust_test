@@ -12,7 +12,6 @@ use std::io::{BufWriter, BufReader};
 extern crate xml;
 use xml::reader::{EventReader, XmlEvent};
 
-
 use crate::raster_boundary;
 
 /// image boundaries with filenames.
@@ -56,6 +55,7 @@ impl ImageBoundary {
         match ds.geo_transform() {
             Ok(trans) => {
                 let boundary = raster_boundary(&trans, &shape);
+                // println!("image boundary: {:?}", boundary);
                 return Ok(ImageBoundary::new(String::from(img), boundary[0], boundary[1], boundary[2], boundary[3]))
             },
             Err(e) => {
@@ -67,6 +67,7 @@ impl ImageBoundary {
                     xml_file = String::from(dir_name.join(file_name.split("-").collect::<Vec<&str>>().first().unwrap()).to_str().unwrap().to_owned() + ".xml");
                 }
                 let boundary = parse_boundaries_from_xml(&xml_file);
+                // println!("image boundary: {:?}", boundary);
                 return Ok(ImageBoundary::new(String::from(img), boundary[0], boundary[1], boundary[2], boundary[3]))
             },
         }
@@ -75,46 +76,97 @@ impl ImageBoundary {
 
 /// Parse boundaries from xml file.
 fn parse_boundaries_from_xml(xml_file: &str) -> [f64; 4] {
-    let file = File::open(xml_file).expect("Open xml file error.");
+    let path = Path::new(xml_file);
+    let file = File::open(&path).expect("Open xml file error.");
     let file = BufReader::new(file);
 
     let parser = EventReader::new(file);
+    let file_name = path.file_name().unwrap().to_str().unwrap();
 
-    let mut keys: Vec<String> = Vec::new();
-    let mut values: Vec<f64> = Vec::new();
-    let elements = vec!["TopLeftLatitude", "TopLeftLongitude", "TopRightLatitude", "TopRightLongitude",
-                        "BottomRightLatitude", "BottomRightLongitude", "BottomLeftLatitude", "BottomLeftLongitude"];
-    for e in parser {
-        match e {
-            Ok(XmlEvent::StartElement { name, .. }) => {
-                if (&elements).contains(&name.local_name.as_str()) {
-                    keys.push(name.local_name);
+    let (mut left, mut bottom, mut right, mut top) = (0.0, 0.0, 0.0, 0.0);
+
+    if file_name.starts_with("GF7") {
+        let elements = vec!["LeftTopPoint", "RightTopPoint", "RightBottomPoint", "LeftBottomPoint"];
+        let mut labels: Vec<String> = Vec::with_capacity(4);
+        let mut lons: Vec<f64> = Vec::with_capacity(4);
+        let mut lats: Vec<f64> = Vec::with_capacity(4);
+    
+        let mut flag = 5;
+    
+        for e in parser {
+            match e {
+                Ok(XmlEvent::StartElement { name, .. }) => {
+                    flag += 1;
+                    
+                    if (&elements).contains(&name.local_name.as_str()) {
+                        flag = 0;
+                        labels.push(name.local_name);
+                    }
                 }
-            }
-            Ok(XmlEvent::Characters(chars)) => {
-                if values.len() != keys.len() {
-                    values.push(chars.parse::<f64>().unwrap());
+                Ok(XmlEvent::Characters(chars)) => {
+                    if flag == 3 {  // Longtitude
+                        lons.push(chars.parse::<f64>().unwrap());
+                    } else if flag == 4 {  // Latitude
+                        lats.push(chars.parse::<f64>().unwrap());
+                    } else {
+                        continue;
+                    }
+                    if lats.len() == 4 {
+                        break;
+                    }
                 }
+                Err(e) => {
+                    println!("Error: {}", e);
+                    break;
+                }
+                _ => {}
             }
-            Err(e) => {
-                println!("Error: {}", e);
-                break;
-            }
-            _ => {}
+            // break;
         }
-        // break;
+        let map: HashMap<String, (f64, f64)> = labels.into_iter().zip(lons.into_iter().zip(lats.into_iter())).collect();
+        left = map.get("LeftTopPoint").unwrap().0.min(map.get("LeftBottomPoint").unwrap().0);
+        bottom = map.get("RightBottomPoint").unwrap().1.min(map.get("LeftBottomPoint").unwrap().1);
+        right = map.get("RightTopPoint").unwrap().0.max(map.get("RightBottomPoint").unwrap().0);
+        top = map.get("LeftTopPoint").unwrap().1.max(map.get("RightTopPoint").unwrap().1);
+    } else {
+        let mut keys: Vec<String> = Vec::with_capacity(8);
+        let mut values: Vec<f64> = Vec::with_capacity(8);
+        let elements = vec!["TopLeftLatitude", "TopLeftLongitude", "TopRightLatitude", "TopRightLongitude",
+                            "BottomRightLatitude", "BottomRightLongitude", "BottomLeftLatitude", "BottomLeftLongitude"];
+        for e in parser {
+            match e {
+                Ok(XmlEvent::StartElement { name, .. }) => {
+                    if (&elements).contains(&name.local_name.as_str()) {
+                        keys.push(name.local_name);
+                    }
+                }
+                Ok(XmlEvent::Characters(chars)) => {
+                    if values.len() != keys.len() {
+                        values.push(chars.parse::<f64>().unwrap());
+                    }
+                    if values.len() == 8 {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    println!("Error: {}", e);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        let map: HashMap<String, f64> = keys.into_iter().zip(values.into_iter()).collect();
+        left = map.get("TopLeftLongitude").unwrap().min(*map.get("BottomLeftLongitude").unwrap());
+        bottom = map.get("BottomRightLatitude").unwrap().min(*map.get("BottomLeftLatitude").unwrap());
+        right = map.get("TopRightLongitude").unwrap().max(*map.get("BottomRightLongitude").unwrap());
+        top = map.get("TopLeftLatitude").unwrap().max(*map.get("TopRightLatitude").unwrap());
+
     }
-    // if GF7
-    let map: HashMap<String, f64> = keys.into_iter().zip(values.into_iter()).collect();
-    let left = map.get("TopLeftLongitude").unwrap().min(*map.get("BottomLeftLongitude").unwrap());
-    let bottom = map.get("BottomRightLatitude").unwrap().min(*map.get("BottomLeftLatitude").unwrap());
-    let right = map.get("TopRightLongitude").unwrap().max(*map.get("BottomRightLongitude").unwrap());
-    let top = map.get("TopLeftLatitude").unwrap().max(*map.get("TopRightLatitude").unwrap());
     [left, bottom, right, top]
 }
 
 
-
+/// Parse input args.
 pub struct ParamsFindIntersected<'a>{
     in_raster: &'a str,
     out_file: &'a str,
@@ -156,7 +208,7 @@ impl<'a> ParamsFindIntersected<'a>{
     }
 }
 
-
+/// main program.
 pub fn run_find_intersected(args: ParamsFindIntersected) -> Result<(), Box<dyn std::error::Error>> {
 
     let out_file = args.out_file;

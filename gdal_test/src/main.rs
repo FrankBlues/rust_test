@@ -4,8 +4,6 @@ use std::path::Path;
 use gdal_test::{gray2rgb, write_block_thread};
 use ndarray::{s, Array2, Zip, ArcArray, Dim};
 
-
-
 extern crate threadpool;
 use threadpool::ThreadPool;
 use std::sync::{Mutex, Arc};
@@ -22,91 +20,20 @@ use gdal::spatial_ref::SpatialRef;
 use gdal::spatial_ref::CoordTransform;
 use gdal_sys::{GDALWarpOperationH, GDALCreateWarpOperation, GDALWarpOptions, GDALCreateWarpOptions};
 
-
-extern crate xml;
 use std::io::BufReader;
 use std::fs::File;
-
+extern crate xml;
 use xml::reader::{EventReader, XmlEvent};
 use std::collections::HashMap;
 
-fn parse_boundaries_from_xml(xml_file: &str, ) -> [f64; 4] {
-    let file = File::open(xml_file).expect("Open xml file error.");
-    let file = BufReader::new(file);
-
-    let parser = EventReader::new(file);
-
-    let mut keys: Vec<String> = Vec::new();
-    let mut values: Vec<f64> = Vec::new();
-    let elements = vec!["TopLeftLatitude", "TopLeftLongitude", "TopRightLatitude", "TopRightLongitude",
-                        "BottomRightLatitude", "BottomRightLongitude", "BottomLeftLatitude", "BottomLeftLongitude"];
-    for e in parser {
-        match e {
-            Ok(XmlEvent::StartElement { name, .. }) => {
-                if (&elements).contains(&name.local_name.as_str()) {
-                    keys.push(name.local_name);
-                }
-            }
-            Ok(XmlEvent::Characters(chars)) => {
-                if values.len() != keys.len() {
-                    values.push(chars.parse::<f64>().unwrap());
-                }
-            }
-            Err(e) => {
-                println!("Error: {}", e);
-                break;
-            }
-            _ => {}
-        }
-        // break;
-    }
-    let map: HashMap<String, f64> = keys.into_iter().zip(values.into_iter()).collect();
-    let left = map.get("TopLeftLongitude").unwrap().min(*map.get("BottomLeftLongitude").unwrap());
-    let bottom = map.get("BottomRightLatitude").unwrap().min(*map.get("BottomLeftLatitude").unwrap());
-    let right = map.get("TopRightLongitude").unwrap().max(*map.get("BottomRightLongitude").unwrap());
-    let top = map.get("TopLeftLatitude").unwrap().max(*map.get("TopRightLatitude").unwrap());
-    [left, bottom, right, top]
-}
-
 fn main() {
-    // let mut bounds: HashMap<String, f64> = HashMap::new();
-    
-    let xml_file = "/data/GF2_PMS2_E109.1_N34.2_20181026_L1A0003549601/GF2_PMS2_E109.1_N34.2_20181026_L1A0003549601-PAN2.xml";
+    let mut bounds: HashMap<String, f64> = HashMap::new();
+    let xml_file = "/data/GF7_DLC_E129.3_N45.9_20200429_L1L0000091709-BWDMUX/GF7_DLC_E129.3_N45.9_20200429_L1L0000091709-BWDMUX.xml";
     let file = File::open(xml_file).expect("Open xml file error.");
     let file = BufReader::new(file);
 
     let parser = EventReader::new(file);
 
-    let mut keys: Vec<String> = Vec::new();
-    let mut values: Vec<f64> = Vec::new();
-    let elements = vec!["TopLeftLatitude", "TopLeftLongitude", "TopRightLatitude", "TopRightLongitude",
-                        "BottomRightLatitude", "BottomRightLongitude", "BottomLeftLatitude", "BottomLeftLongitude"];
-    for e in parser {
-        match e {
-            Ok(XmlEvent::StartElement { name, .. }) => {
-                if (&elements).contains(&name.local_name.as_str()) {
-                    keys.push(name.local_name);
-                }
-            }
-            Ok(XmlEvent::Characters(chars)) => {
-                if values.len() != keys.len() {
-                    values.push(chars.parse::<f64>().unwrap());
-                }
-            }
-            Err(e) => {
-                println!("Error: {}", e);
-                break;
-            }
-            _ => {}
-        }
-        // break;
-    }
-    let map: HashMap<String, f64> = keys.into_iter().zip(values.into_iter()).collect();
-    let left = map.get("TopLeftLongitude").unwrap().min(*map.get("BottomLeftLongitude").unwrap());
-    let bottom = map.get("BottomRightLatitude").unwrap().min(*map.get("BottomLeftLatitude").unwrap());
-    let right = map.get("TopRightLongitude").unwrap().max(*map.get("BottomRightLongitude").unwrap());
-    let top = map.get("TopLeftLatitude").unwrap().max(*map.get("TopRightLatitude").unwrap());
-    println!("{:?}", [left, bottom, right, top]);
 
     // let in_raster = "/data/GF2_PMS2_E109.1_N34.2_20181026_L1A0003549601/GF2_PMS2_E109.1_N34.2_20181026_L1A0003549601-PAN2.tiff";
     // let out_raster = "/data/GF2_PMS2_E109.1_N34.2_20181026_L1A0003549601/GF2_PMS2_E109.1_N34.2_20181026_L1A0003549601-PAN2.tiff";
