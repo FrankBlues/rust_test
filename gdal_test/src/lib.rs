@@ -1,17 +1,16 @@
 use gdal::raster::{Buffer, GdalType, RasterBand};
 use gdal::{Dataset, Driver};
+use ndarray::{s, ArcArray, Array2, Dim, Zip};
 use std::path::Path;
-use ndarray::{s, Array2, Zip, ArcArray, Dim};
 
+use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
-use std::sync::{Mutex, Arc};
 
 mod rtree;
-pub use rtree::{ImageBoundary, ParamsFindIntersected, run_find_intersected};
+pub use rtree::{run_find_intersected, ImageBoundary, ParamsFindIntersected};
 
 mod io_utils;
-pub use io_utils::{get_files, write_vec_to_text, check_parent_dir};
-
+pub use io_utils::{check_parent_dir, get_files, write_vec_to_text};
 
 // #[cfg(feature = "ndarray")]
 #[cfg(test)]
@@ -273,7 +272,6 @@ mod tests {
 
         // gray2rgb::<u8>(rb, &out_raster, &ds, val_value, r, g, b).unwrap();
 
-        
         type T = u8;
 
         let mut array = Array2::<u8>::zeros((y_size, x_size));
@@ -342,7 +340,12 @@ mod tests {
         {
             let driver = Driver::get("GTiff").unwrap();
             let mut new_ds = driver
-                .create_with_band_type::<T>(out_raster, rb.x_size() as isize, rb.y_size() as isize, 3)
+                .create_with_band_type::<T>(
+                    out_raster,
+                    rb.x_size() as isize,
+                    rb.y_size() as isize,
+                    3,
+                )
                 .unwrap();
             new_ds
                 .set_geo_transform(&ds.geo_transform().unwrap())
@@ -367,14 +370,12 @@ mod tests {
 
 /// return the raster boundary [left, bottom, right, top]
 pub fn raster_boundary(geo_transform: &[f64; 6], raster_size: &(usize, usize)) -> [f64; 4] {
-
     let res = geo_transform[1];
     let bottom = geo_transform[3] - res * (raster_size.1 as f64);
     let right = geo_transform[0] + res * (raster_size.0 as f64);
 
     [geo_transform[0], bottom, right, geo_transform[3]]
 }
-
 
 pub fn xy2pixel_xy(x: f64, y: f64, geo_transform: &[f64; 6]) -> (usize, usize) {
     let res = geo_transform[1];
@@ -391,7 +392,6 @@ pub fn pixel_xy2xy(pixel_x: usize, pixel_y: usize, geo_transform: &[f64; 6]) -> 
         geo_transform[3] - (pixel_y as f64) * res,
     )
 }
-
 
 /// Parse the input parameters into this struct.
 pub struct Config {
@@ -476,43 +476,43 @@ pub fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
 
     match dtype {
         1 => {
-            type T = u8;  //  GDALDataType::GDT_Byte
+            type T = u8; //  GDALDataType::GDT_Byte
             if let Err(e) = gray2rgb::<T>(rb, &out_raster, &ds, val_value as T, r, g, b) {
                 eprintln!("GRAY TO RGB error: {}", e);
             }
         }
         2 => {
-            type T = u16;  // GDALDataType::GDT_UInt16
+            type T = u16; // GDALDataType::GDT_UInt16
             if let Err(e) = gray2rgb::<T>(rb, &out_raster, &ds, val_value as T, r, g, b) {
                 eprintln!("GRAY TO RGB error: {}", e);
             }
         }
         3 => {
-            type T = i16;  // GDALDataType::GDT_Int16
+            type T = i16; // GDALDataType::GDT_Int16
             if let Err(e) = gray2rgb::<T>(rb, &out_raster, &ds, val_value as T, r, g, b) {
                 eprintln!("GRAY TO RGB error: {}", e);
             }
         }
         4 => {
-            type T = u32;  // GDALDataType::GDT_UInt32
+            type T = u32; // GDALDataType::GDT_UInt32
             if let Err(e) = gray2rgb::<T>(rb, &out_raster, &ds, val_value as T, r, g, b) {
                 eprintln!("GRAY TO RGB error: {}", e);
             }
         }
         5 => {
-            type T = i32;  // GDALDataType::GDT_Int32
+            type T = i32; // GDALDataType::GDT_Int32
             if let Err(e) = gray2rgb::<T>(rb, &out_raster, &ds, val_value as T, r, g, b) {
                 eprintln!("GRAY TO RGB error: {}", e);
             }
         }
         6 => {
-            type T = f32;  // GDALDataType::GDT_Float32
+            type T = f32; // GDALDataType::GDT_Float32
             if let Err(e) = gray2rgb::<T>(rb, &out_raster, &ds, val_value as T, r, g, b) {
                 eprintln!("GRAY TO RGB error: {}", e);
             }
         }
         7 => {
-            type T = f64;  // GDALDataType::GDT_Float64
+            type T = f64; // GDALDataType::GDT_Float64
             if let Err(e) = gray2rgb::<T>(rb, &out_raster, &ds, val_value as T, r, g, b) {
                 eprintln!("GRAY TO RGB error: {}", e);
             }
@@ -528,14 +528,16 @@ pub fn gray2rgb<T: GdalType + Copy + PartialEq + Into<f64>>(
     out_raster: &str,
     ds: &Dataset,
     val_value: T,
-    r: u8, g: u8, b: u8,
+    r: u8,
+    g: u8,
+    b: u8,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let rb_data_buffer: Buffer<T> = rb.read_band_as().unwrap();
     let rb_data = rb_data_buffer.data;
     let (x_size, y_size) = ds.raster_size();
-    let new_buff_data = vec![0 as u8; x_size*y_size];
+    let new_buff_data = vec![0 as u8; x_size * y_size];
     let mut rb_data_new: Buffer<u8> = Buffer::new((x_size, y_size), new_buff_data);
-    
+
     // Output
     {
         let driver = Driver::get("GTiff").unwrap();
@@ -555,7 +557,9 @@ pub fn gray2rgb<T: GdalType + Copy + PartialEq + Into<f64>>(
         }
         let mut new_rb = new_ds.rasterband(1).unwrap();
         new_rb.set_no_data_value(0.).unwrap();
-        new_rb.write((0, 0), (x_size, y_size), &rb_data_new).unwrap();
+        new_rb
+            .write((0, 0), (x_size, y_size), &rb_data_new)
+            .unwrap();
         // band 2
         // for each
         for (i, d) in (&mut rb_data_new.data).iter_mut().enumerate() {
@@ -565,7 +569,9 @@ pub fn gray2rgb<T: GdalType + Copy + PartialEq + Into<f64>>(
         }
         let mut new_rb = new_ds.rasterband(2).unwrap();
         new_rb.set_no_data_value(0.).unwrap();
-        new_rb.write((0, 0), (x_size, y_size), &rb_data_new).unwrap();
+        new_rb
+            .write((0, 0), (x_size, y_size), &rb_data_new)
+            .unwrap();
 
         // band 3
         // for each
@@ -576,7 +582,9 @@ pub fn gray2rgb<T: GdalType + Copy + PartialEq + Into<f64>>(
         }
         let mut new_rb = new_ds.rasterband(3).unwrap();
         new_rb.set_no_data_value(0.).unwrap();
-        new_rb.write((0, 0), (x_size, y_size), &rb_data_new).unwrap();
+        new_rb
+            .write((0, 0), (x_size, y_size), &rb_data_new)
+            .unwrap();
     }
     Ok(())
 }
@@ -603,8 +611,12 @@ pub fn run1(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let (x_size, y_size) = ds.raster_size();
 
     let (block_x, block_y) = rb.block_size();
-    let (x_remain, _) = rb.actual_block_size(((x_size / block_x) as isize, 0)).unwrap();
-    let (_, y_remain) = rb.actual_block_size((0, (y_size / block_y) as isize)).unwrap();
+    let (x_remain, _) = rb
+        .actual_block_size(((x_size / block_x) as isize, 0))
+        .unwrap();
+    let (_, y_remain) = rb
+        .actual_block_size((0, (y_size / block_y) as isize))
+        .unwrap();
     type T = u8;
 
     let array = Array2::<T>::zeros((y_size, x_size));
@@ -622,20 +634,29 @@ pub fn run1(config: Config) -> Result<(), Box<dyn std::error::Error>> {
             let arr_g = Arc::clone(&array_g);
             let arr_b = Arc::clone(&array_b);
             let block_arr: Array2<T> = rb.read_block((x, y)).unwrap();
-            
+
             pool.execute(move || {
-                write_block_thread(block_arr, x, y, x_size, y_size, block_x, block_y,
-                    x_remain, y_remain, arr_r, arr_g, arr_b,
-                    val_value, r, g, b);
+                write_block_thread(
+                    block_arr, x, y, x_size, y_size, block_x, block_y, x_remain, y_remain, arr_r,
+                    arr_g, arr_b, val_value, r, g, b,
+                );
             });
-            
         }
     }
     pool.join();
 
-    let buffer_r = Buffer::new((x_size, y_size), array_r.lock().unwrap().to_owned().into_raw_vec());
-    let buffer_g = Buffer::new((x_size, y_size), array_g.lock().unwrap().to_owned().into_raw_vec());
-    let buffer_b = Buffer::new((x_size, y_size), array_b.lock().unwrap().to_owned().into_raw_vec());
+    let buffer_r = Buffer::new(
+        (x_size, y_size),
+        array_r.lock().unwrap().to_owned().into_raw_vec(),
+    );
+    let buffer_g = Buffer::new(
+        (x_size, y_size),
+        array_g.lock().unwrap().to_owned().into_raw_vec(),
+    );
+    let buffer_b = Buffer::new(
+        (x_size, y_size),
+        array_b.lock().unwrap().to_owned().into_raw_vec(),
+    );
 
     use std::thread;
     // Output
@@ -685,24 +706,52 @@ pub fn run1(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-pub fn write_block_thread<T: Copy + PartialEq + Into<f64>>(block_arr: Array2<T>,
-    x: usize, y: usize, x_size: usize, y_size: usize, block_x: usize, block_y: usize,
-    x_remain: usize, y_remain: usize,
-    array_r: Arc<Mutex<ArcArray<u8, Dim<[usize; 2]>>>>, array_g: Arc<Mutex<ArcArray<u8, Dim<[usize; 2]>>>>, array_b: Arc<Mutex<ArcArray<u8, Dim<[usize; 2]>>>>,
-    val_value: T, r: u8, g: u8, b: u8) {
+pub fn write_block_thread<T: Copy + PartialEq + Into<f64>>(
+    block_arr: Array2<T>,
+    x: usize,
+    y: usize,
+    x_size: usize,
+    y_size: usize,
+    block_x: usize,
+    block_y: usize,
+    x_remain: usize,
+    y_remain: usize,
+    array_r: Arc<Mutex<ArcArray<u8, Dim<[usize; 2]>>>>,
+    array_g: Arc<Mutex<ArcArray<u8, Dim<[usize; 2]>>>>,
+    array_b: Arc<Mutex<ArcArray<u8, Dim<[usize; 2]>>>>,
+    val_value: T,
+    r: u8,
+    g: u8,
+    b: u8,
+) {
+    let mut r_arr = array_r.lock().unwrap();
+    let mut g_arr = array_g.lock().unwrap();
+    let mut b_arr = array_b.lock().unwrap();
 
-        let mut r_arr = array_r.lock().unwrap();
-        let mut g_arr = array_g.lock().unwrap();
-        let mut b_arr = array_b.lock().unwrap();
+    write_block(
+        block_arr, x, y, x_size, y_size, block_x, block_y, x_remain, y_remain, &mut r_arr,
+        &mut g_arr, &mut b_arr, val_value, r, g, b,
+    );
+}
 
-        write_block(block_arr, x, y, x_size, y_size, block_x, block_y, x_remain, y_remain, &mut r_arr, &mut g_arr, &mut b_arr, val_value, r, g, b);
-    }
-
-pub fn write_block<T: Copy + PartialEq + Into<f64>>(mut block_arr: Array2<T>,
-    x: usize, y: usize, x_size: usize, y_size: usize, block_x: usize, block_y: usize,
-    x_remain: usize, y_remain: usize,
-    array_r: &mut ArcArray<u8, Dim<[usize; 2]>>, array_g: &mut ArcArray<u8, Dim<[usize; 2]>>, array_b: &mut ArcArray<u8, Dim<[usize; 2]>>,
-    val_value: T, r: u8, g: u8, b: u8) {
+pub fn write_block<T: Copy + PartialEq + Into<f64>>(
+    mut block_arr: Array2<T>,
+    x: usize,
+    y: usize,
+    x_size: usize,
+    y_size: usize,
+    block_x: usize,
+    block_y: usize,
+    x_remain: usize,
+    y_remain: usize,
+    array_r: &mut ArcArray<u8, Dim<[usize; 2]>>,
+    array_g: &mut ArcArray<u8, Dim<[usize; 2]>>,
+    array_b: &mut ArcArray<u8, Dim<[usize; 2]>>,
+    val_value: T,
+    r: u8,
+    g: u8,
+    b: u8,
+) {
     // block index
     let block_x_e = block_x * (x + 1);
     let block_y_e = block_y * (y + 1);

@@ -1,11 +1,10 @@
 extern crate clap;
 use clap::{App, Arg};
 
-use gdal_test::{Config, run};
+use gdal_test::{run, Config};
 use std::process;
 
-
-fn main () -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = App::new("gray2rgb")
         .version("0.1.0")
         .author("menglimeng")
@@ -17,7 +16,7 @@ fn main () -> Result<(), Box<dyn std::error::Error>> {
                 .value_name("/mnt/gray.tif")
                 .help("Input image with only one band.")
                 .takes_value(true)
-                .required(true)
+                .required(true),
         )
         .arg(
             Arg::with_name("out_raster")
@@ -26,7 +25,7 @@ fn main () -> Result<(), Box<dyn std::error::Error>> {
                 .value_name("/mnt/rgb.tif")
                 .help("Output image with three band in the RGB order.")
                 .takes_value(true)
-                .required(true)
+                .required(true),
         )
         .arg(
             Arg::with_name("valid")
@@ -36,7 +35,7 @@ fn main () -> Result<(), Box<dyn std::error::Error>> {
                 .default_value("1")
                 .help("The valid value in the input image.")
                 .takes_value(true)
-                .required(true)
+                .required(true),
         )
         .arg(
             Arg::with_name("rgb")
@@ -46,10 +45,10 @@ fn main () -> Result<(), Box<dyn std::error::Error>> {
                 .default_value("255 255 255")
                 .help("The rgb value in the output image.")
                 .takes_value(true)
-                .required(true)
+                .required(true),
         )
         .get_matches();
-    
+
     let config = Config::new(matches)?;
     if let Err(e) = run(config) {
         eprintln!("Application error: {}", e);
@@ -57,5 +56,3 @@ fn main () -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
-
-

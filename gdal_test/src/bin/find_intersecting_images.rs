@@ -1,11 +1,10 @@
 extern crate clap;
 use clap::{App, Arg};
 
+use gdal_test::{run_find_intersected, ParamsFindIntersected};
 use std::process;
-use gdal_test::{ParamsFindIntersected, run_find_intersected};
 
-fn main () -> Result<(), Box<dyn std::error::Error>> {
-
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = App::new("find_images_intersected.")
         .version("0.1.0")
         .author("menglimeng")
@@ -48,15 +47,12 @@ fn main () -> Result<(), Box<dyn std::error::Error>> {
                 .required(true)
         )
         .get_matches();
-    
+
     let config = ParamsFindIntersected::new(&matches)?;
     if let Err(e) = run_find_intersected(config) {
         eprintln!("Application error: {}", e);
         process::exit(1);
     }
-    
+
     Ok(())
 }
-
-
-
