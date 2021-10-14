@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::path::Path;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter};
+use std::path::Path;
 
 use gdal::Dataset;
 use glob::Paths;
