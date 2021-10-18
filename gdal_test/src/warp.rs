@@ -26,12 +26,14 @@ pub mod raster_projection {
 
     /// Reproject an image and create the target reprojected image(GDALCreateAndReprojectImage).
     pub fn reproject_to_file(src: &Dataset, dst: &str, dst_prj: &str) -> Result<()> {
+        let c_dst = CString::new(dst).unwrap();
+        let c_dst_prj = CString::new(dst_prj).unwrap();
         let rv = unsafe {
             gdal_sys::GDALCreateAndReprojectImage(
                 src.c_dataset(),                         // GDALDatasetH
                 null(), // the source projection. If NULL the source projection is read from from src.
-                CString::new(dst).unwrap().as_ptr(), // the destination image file.
-                CString::new(dst_prj).unwrap().as_ptr(), // the destination projection in wkt format.
+                c_dst.as_ptr(), // the destination image file.
+                c_dst_prj.as_ptr(), // the destination projection in wkt format.
                 null_mut(),                              // GDALDriverH
                 null_mut(),                              // char **papszCreateOptions
                 GDALResampleAlg::GRA_Bilinear,           // the type of resampling to use
@@ -58,6 +60,9 @@ pub mod raster_projection {
         let src_sr = ds.spatial_ref().unwrap();
         let src_wkt = src_sr.to_wkt().unwrap();
 
+        // raster count
+        let rc = ds.raster_count() as i32;
+
         // dst file
         let dst_file = CString::new(out_file).unwrap();
         // dst data type
@@ -80,9 +85,9 @@ pub mod raster_projection {
         let mut n_lines: i32 = 0;
 
         // warp options parameters
-        let mut pan_src = 1_i32;
-        let mut pan_dst = 1_i32;
-        let mut nodata = -99999.0;
+        let mut pan_src = 1;
+        let mut pan_dst = 1;
+        let mut nodata = -0.0;
         let err_torlerance = 0.125;
 
         unsafe {
@@ -114,7 +119,7 @@ pub mod raster_projection {
                 dst_file.as_ptr(),
                 n_pixels,
                 n_lines,
-                ds.raster_count() as i32,
+                rc,
                 dtype,
                 null_mut(),
             );
@@ -129,10 +134,15 @@ pub mod raster_projection {
             // (*ops).dfWarpMemoryLimit = 4000000000.0;
             (*ops).hSrcDS = src_ds;
             (*ops).hDstDS = dst_ds;
-            (*ops).nBandCount = ds.raster_count() as i32;
+            (*ops).nBandCount = 0;  // all bands
             
-            (*ops).panSrcBands = &mut pan_src;
+            (*ops).panSrcBands = &mut pan_src;  // CPLMalloc(
             (*ops).panDstBands = &mut pan_dst;
+
+            let pan_src = &mut (1..=rc).collect::<Vec<i32>>();
+            let pan_dst = &mut (1..=rc).collect::<Vec<i32>>();
+            (*ops).panSrcBands = pan_src.as_mut_ptr();  // CPLMalloc(
+            (*ops).panDstBands = pan_dst.as_mut_ptr();
 
             (*ops).pfnProgress = Some(GDALTermProgress);
 
@@ -163,8 +173,6 @@ pub mod raster_projection {
             (*ops).padfSrcNoDataReal = &mut nodata;
             (*ops).padfSrcNoDataImag = &mut 0.0_f64;
             (*ops).padfDstNoDataReal = &mut nodata;
-            // GDALWarpInitDstNoDataReal(ops, 0.0);
-            // GDALWarpInitSrcNoDataReal(ops, 0.0);
             (*ops).padfDstNoDataImag = &mut 0.0_f64;
             let _init_dest = CString::new("INIT_DEST").unwrap();
             let _no_data = CString::new("NO_DATA").unwrap();
@@ -172,23 +180,35 @@ pub mod raster_projection {
             let _all_cpus = CString::new("ALL_CPUS").unwrap();
             let _u_src_nodata = CString::new("UNIFIED_SRC_NODATA").unwrap();
             let _yes = CString::new("YES").unwrap();
-            (*ops).papszWarpOptions = CSLSetNameValue(
-                (*ops).papszWarpOptions,
-                _u_src_nodata.as_ptr(),
-                _yes.as_ptr(),
-            );
+
+            let mut warp_extras = (*ops).papszWarpOptions;
+            
             if (*ops).padfDstNoDataReal != null_mut() {
-                (*ops).papszWarpOptions = CSLSetNameValue(
-                    (*ops).papszWarpOptions,
+                warp_extras = CSLSetNameValue(
+                    warp_extras,
                     _init_dest.as_ptr(),
                     _no_data.as_ptr(),
                 );
             }
-            (*ops).papszWarpOptions = CSLSetNameValue(
-                (*ops).papszWarpOptions,
+
+            warp_extras = CSLSetNameValue(
+                warp_extras,
                 _n_threads.as_ptr(),
                 _all_cpus.as_ptr(),
             );
+
+            warp_extras = CSLSetNameValue(
+                warp_extras,
+                _u_src_nodata.as_ptr(),
+                _yes.as_ptr(),
+            );
+
+            // let _n = CSLFetchNameValue(warp_extras, _u_src_nodata.as_ptr());
+
+            // let c_str = unsafe { CStr::from_ptr(*warp_extras) };
+            // println!("{}", c_str.to_string_lossy().into_owned());
+
+            (*ops).papszWarpOptions = warp_extras;
 
             // Operation //
             let o_operation = GDALCreateWarpOperation(ops);

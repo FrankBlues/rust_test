@@ -1,4 +1,4 @@
-use gdal::raster::{Buffer, GdalType, RasterBand};
+use gdal::raster::{Buffer, GdalType, RasterBand, GDALDataType, ColorInterpretation};
 use gdal::{Dataset, Driver};
 use ndarray::{s, ArcArray, Array2, Dim, Zip};
 use std::path::Path;
@@ -394,6 +394,42 @@ pub fn pixel_xy2xy(pixel_x: usize, pixel_y: usize, geo_transform: &[f64; 6]) -> 
         geo_transform[3] - (pixel_y as f64) * res,
     )
 }
+
+/// Parse raster metadatas
+pub struct RasterMetadata {
+    pub geo_transform: [f64; 6],
+    pub rows: usize,
+    pub cols: usize,
+    pub res: (f64, f64),
+    pub count: isize,
+    pub bounds: [f64; 4],
+    pub nodata: Option<f64>,
+    pub dtype: GDALDataType::Type,
+}
+
+impl RasterMetadata {
+    pub fn from(dataset: &Dataset) -> RasterMetadata {
+        let geo_transform = dataset.geo_transform().unwrap();
+        let (cols, rows) = dataset.raster_size();
+        let res = (geo_transform[1], -geo_transform[5]);
+        let count = dataset.raster_count();
+        let first_band = dataset.rasterband(1).unwrap();
+        let nodata = first_band.no_data_value();
+        let dtype = first_band.band_type();
+        RasterMetadata {
+            geo_transform: geo_transform,
+            rows: rows,
+            cols: cols,
+            res: res,
+            count: count,
+            bounds: raster_boundary(&geo_transform, &(cols, rows)),
+            nodata: nodata,
+            dtype: dtype,
+        }
+    }
+}
+
+
 
 /// Parse the input parameters into this struct.
 pub struct Config {
