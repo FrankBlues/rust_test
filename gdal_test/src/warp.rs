@@ -1,16 +1,12 @@
-use gdal::spatial_ref::CoordTransform;
 use gdal::spatial_ref::SpatialRef;
 use gdal::{Dataset, Driver};
 use gdal_sys::{
-    CPLMalloc, CSLFetchNameValue, CSLSetNameValue, GDALApproxTransform,
-    GDALApproxTransformerOwnsSubtransformer, GDALChunkAndWarpImage, GDALChunkAndWarpMulti,
-    GDALClose, GDALCreate, GDALCreateAndReprojectImage, GDALCreateApproxTransformer,
+    CSLSetNameValue, GDALApproxTransform,
+    GDALApproxTransformerOwnsSubtransformer, GDALChunkAndWarpMulti,
+    GDALClose, GDALCreate, GDALCreateApproxTransformer,
     GDALCreateGenImgProjTransformer, GDALCreateGenImgProjTransformer2, GDALCreateWarpOperation,
     GDALCreateWarpOptions, GDALDestroyGenImgProjTransformer, GDALGenImgProjTransform,
-    GDALGetCacheMax, GDALGetCacheMax64, GDALReprojectImage, GDALSetCacheMax, GDALSetCacheMax64,
     GDALSetGeoTransform, GDALSetProjection, GDALSuggestedWarpOutput, GDALTermProgress,
-    GDALTransformerFunc, GDALWarpInitDstNoDataReal, GDALWarpInitSrcNoDataReal, GDALWarpOperationH,
-    GDALWarpOptions,
 };
 
 use gdal::errors::*;

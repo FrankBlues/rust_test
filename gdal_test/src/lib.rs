@@ -1,5 +1,6 @@
-use gdal::raster::{Buffer, GdalType, RasterBand, GDALDataType, ColorInterpretation};
+use gdal::raster::{Buffer, GdalType, RasterBand, GDALDataType};
 use gdal::{Dataset, Driver};
+use gdal::spatial_ref::SpatialRef;
 use ndarray::{s, ArcArray, Array2, Dim, Zip};
 use std::path::Path;
 
@@ -11,6 +12,12 @@ pub use rtree::{run_find_intersected, ImageBoundary, ParamsFindIntersected};
 
 mod io_utils;
 pub use io_utils::{check_parent_dir, get_files, write_vec_to_text};
+
+mod window;
+pub use window::calculate_window;
+
+mod merge;
+pub use merge::merge;
 
 // mod warp;
 // pub use warp::raster_projection::reproject;
@@ -396,6 +403,7 @@ pub fn pixel_xy2xy(pixel_x: usize, pixel_y: usize, geo_transform: &[f64; 6]) -> 
 }
 
 /// Parse raster metadatas
+#[derive(Clone)]
 pub struct RasterMetadata {
     pub geo_transform: [f64; 6],
     pub rows: usize,
@@ -405,12 +413,33 @@ pub struct RasterMetadata {
     pub bounds: [f64; 4],
     pub nodata: Option<f64>,
     pub dtype: GDALDataType::Type,
+    pub driver: String,
+    pub srs: Option<SpatialRef>,
 }
 
 impl RasterMetadata {
+    pub fn new() -> RasterMetadata {
+        RasterMetadata {
+            geo_transform: [0.0; 6],
+            rows: 0,
+            cols: 0,
+            res: (0.0, 0.0),
+            count: 1,
+            bounds: [0.0; 4],
+            nodata: None,
+            dtype: 1,
+            driver: String::from("GTiff"),
+            srs: None,
+        }
+    }
     pub fn from(dataset: &Dataset) -> RasterMetadata {
         let geo_transform = dataset.geo_transform().unwrap();
         let (cols, rows) = dataset.raster_size();
+        let srs;
+        match dataset.spatial_ref(){
+            Ok(sr) => srs = Some(sr),
+            Err(_) => srs = None,
+        }
         let res = (geo_transform[1], -geo_transform[5]);
         let count = dataset.raster_count();
         let first_band = dataset.rasterband(1).unwrap();
@@ -425,6 +454,8 @@ impl RasterMetadata {
             bounds: raster_boundary(&geo_transform, &(cols, rows)),
             nodata: nodata,
             dtype: dtype,
+            driver: dataset.driver().short_name(),
+            srs: srs
         }
     }
 }
