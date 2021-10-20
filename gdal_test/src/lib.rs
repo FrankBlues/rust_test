@@ -1,6 +1,6 @@
-use gdal::raster::{Buffer, GdalType, RasterBand, GDALDataType};
-use gdal::{Dataset, Driver};
+use gdal::raster::{Buffer, GDALDataType, GdalType, RasterBand};
 use gdal::spatial_ref::SpatialRef;
+use gdal::{Dataset, Driver};
 use ndarray::{s, ArcArray, Array2, Dim, Zip};
 use std::path::Path;
 
@@ -436,7 +436,7 @@ impl RasterMetadata {
         let geo_transform = dataset.geo_transform().unwrap();
         let (cols, rows) = dataset.raster_size();
         let srs;
-        match dataset.spatial_ref(){
+        match dataset.spatial_ref() {
             Ok(sr) => srs = Some(sr),
             Err(_) => srs = None,
         }
@@ -455,12 +455,10 @@ impl RasterMetadata {
             nodata: nodata,
             dtype: dtype,
             driver: dataset.driver().short_name(),
-            srs: srs
+            srs: srs,
         }
     }
 }
-
-
 
 /// Parse the input parameters into this struct.
 pub struct Config {

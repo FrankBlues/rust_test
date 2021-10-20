@@ -104,7 +104,10 @@ fn parse_boundaries_from_xml(xml_file: &str) -> [f64; 4] {
     let parser = EventReader::new(file);
     let file_name = path.file_name().unwrap().to_str().unwrap();
 
-    let (mut left, mut bottom, mut right, mut top) = (0.0, 0.0, 0.0, 0.0);
+    let left;
+    let bottom;
+    let right;
+    let top;
 
     if file_name.starts_with("GF7") {
         let elements = vec![

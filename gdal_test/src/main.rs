@@ -1,5 +1,5 @@
-use gdal::Metadata;
 use gdal::raster::{Buffer, GdalType, RasterBand, ResampleAlg};
+use gdal::Metadata;
 use gdal::{Dataset, Driver};
 use gdal_test::{gray2rgb, write_block_thread};
 use ndarray::{s, ArcArray, Array2, Dim, Zip};
@@ -45,7 +45,7 @@ use warp::raster_projection::reproject;
 mod io_utils;
 use io_utils::get_files;
 
-use gdal_test::{RasterMetadata, raster_boundary};
+use gdal_test::{raster_boundary, RasterMetadata};
 use std::any::type_name;
 use std::any::Any;
 
@@ -92,6 +92,14 @@ fn main() {
             Err(e) => println!("{:?}", e),
         }
     }
-    merge(files, output_file, output_res, output_nodata, output_count, output_bounds, output_band_index, resample_method);
-
+    merge(
+        files,
+        output_file,
+        output_res,
+        output_nodata,
+        output_count,
+        output_bounds,
+        output_band_index,
+        resample_method,
+    );
 }

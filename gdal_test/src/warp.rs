@@ -1,9 +1,8 @@
 use gdal::spatial_ref::SpatialRef;
 use gdal::{Dataset, Driver};
 use gdal_sys::{
-    CSLSetNameValue, GDALApproxTransform,
-    GDALApproxTransformerOwnsSubtransformer, GDALChunkAndWarpMulti,
-    GDALClose, GDALCreate, GDALCreateApproxTransformer,
+    CSLSetNameValue, GDALApproxTransform, GDALApproxTransformerOwnsSubtransformer,
+    GDALChunkAndWarpMulti, GDALClose, GDALCreate, GDALCreateApproxTransformer,
     GDALCreateGenImgProjTransformer, GDALCreateGenImgProjTransformer2, GDALCreateWarpOperation,
     GDALCreateWarpOptions, GDALDestroyGenImgProjTransformer, GDALGenImgProjTransform,
     GDALSetGeoTransform, GDALSetProjection, GDALSuggestedWarpOutput, GDALTermProgress,
@@ -26,14 +25,14 @@ pub mod raster_projection {
         let c_dst_prj = CString::new(dst_prj).unwrap();
         let rv = unsafe {
             gdal_sys::GDALCreateAndReprojectImage(
-                src.c_dataset(),                         // GDALDatasetH
+                src.c_dataset(),               // GDALDatasetH
                 null(), // the source projection. If NULL the source projection is read from from src.
                 c_dst.as_ptr(), // the destination image file.
                 c_dst_prj.as_ptr(), // the destination projection in wkt format.
-                null_mut(),                              // GDALDriverH
-                null_mut(),                              // char **papszCreateOptions
-                GDALResampleAlg::GRA_Bilinear,           // the type of resampling to use
-                0.0,                                     // dfWarpMemoryLimit
+                null_mut(), // GDALDriverH
+                null_mut(), // char **papszCreateOptions
+                GDALResampleAlg::GRA_Bilinear, // the type of resampling to use
+                0.0,    // dfWarpMemoryLimit
                 0.0, // maximum error measured in input pixels that is allowed in approximating the transformation
                 None, // a GDALProgressFunc()
                 null_mut(), // argument to be passed to pfnProgress. May be NULL.
@@ -50,7 +49,6 @@ pub mod raster_projection {
         ds: &Dataset,
         dst_epsg_code: u32,
         out_file: &str,
-
     ) -> std::result::Result<(), Box<dyn std::error::Error>> {
         // src spacial referrence
         let src_sr = ds.spatial_ref().unwrap();
@@ -75,7 +73,7 @@ pub mod raster_projection {
         // to c str
         let src_wkt_p = CString::new(src_wkt).unwrap();
         let dst_wkt_p = CString::new(dst_wkt).unwrap();
-        //dst transform, cols, rows variables 
+        //dst transform, cols, rows variables
         let mut dst_trans = [0.0; 6];
         let mut n_pixels: i32 = 0;
         let mut n_lines: i32 = 0;
@@ -119,7 +117,7 @@ pub mod raster_projection {
                 dtype,
                 null_mut(),
             );
-        
+
             // Set metadata
             GDALSetProjection(dst_ds, dst_wkt_p.as_ptr());
             GDALSetGeoTransform(dst_ds, dst_trans.as_mut_ptr());
@@ -130,14 +128,14 @@ pub mod raster_projection {
             // (*ops).dfWarpMemoryLimit = 4000000000.0;
             (*ops).hSrcDS = src_ds;
             (*ops).hDstDS = dst_ds;
-            (*ops).nBandCount = 0;  // all bands
-            
-            (*ops).panSrcBands = &mut pan_src;  // CPLMalloc(
+            (*ops).nBandCount = 0; // all bands
+
+            (*ops).panSrcBands = &mut pan_src; // CPLMalloc(
             (*ops).panDstBands = &mut pan_dst;
 
             let pan_src = &mut (1..=rc).collect::<Vec<i32>>();
             let pan_dst = &mut (1..=rc).collect::<Vec<i32>>();
-            (*ops).panSrcBands = pan_src.as_mut_ptr();  // CPLMalloc(
+            (*ops).panSrcBands = pan_src.as_mut_ptr(); // CPLMalloc(
             (*ops).panDstBands = pan_dst.as_mut_ptr();
 
             (*ops).pfnProgress = Some(GDALTermProgress);
@@ -178,26 +176,14 @@ pub mod raster_projection {
             let _yes = CString::new("YES").unwrap();
 
             let mut warp_extras = (*ops).papszWarpOptions;
-            
+
             if (*ops).padfDstNoDataReal != null_mut() {
-                warp_extras = CSLSetNameValue(
-                    warp_extras,
-                    _init_dest.as_ptr(),
-                    _no_data.as_ptr(),
-                );
+                warp_extras = CSLSetNameValue(warp_extras, _init_dest.as_ptr(), _no_data.as_ptr());
             }
 
-            warp_extras = CSLSetNameValue(
-                warp_extras,
-                _n_threads.as_ptr(),
-                _all_cpus.as_ptr(),
-            );
+            warp_extras = CSLSetNameValue(warp_extras, _n_threads.as_ptr(), _all_cpus.as_ptr());
 
-            warp_extras = CSLSetNameValue(
-                warp_extras,
-                _u_src_nodata.as_ptr(),
-                _yes.as_ptr(),
-            );
+            warp_extras = CSLSetNameValue(warp_extras, _u_src_nodata.as_ptr(), _yes.as_ptr());
 
             // let _n = CSLFetchNameValue(warp_extras, _u_src_nodata.as_ptr());
 
