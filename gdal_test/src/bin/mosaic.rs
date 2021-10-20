@@ -1,4 +1,5 @@
 use std::process;
+use std::path::Path;
 
 extern crate clap;
 use clap::{App, Arg};
@@ -106,28 +107,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         process::exit(1);
     }
     Ok(())
-
-    // let output_file = "/data/mosaic113.tif";
-    // let output_count: Option<isize> = None;
-    // let output_bounds: Option<[f64; 4]> = None;
-    // let output_res: Option<(f64, f64)> = None;
-    // // let output_res: Option<(f64, f64)> = Some((3e-5, 4e-5));
-    // let output_nodata: Option<f64> = None;
-    // let output_nodata: Option<f64> = Some(0.0);
-    // let output_band_index: Option<Vec<isize>> = None;
-    // let resample_method = ResampleAlg::Bilinear;
-
-    // let mut files = vec![];
-    // for entry in get_files("/data/test_mosaic", ".tif").unwrap() {
-    //     match entry {
-    //         Ok(p) => files.push(p.to_str().unwrap().to_owned()),
-    //         Err(e) => println!("{:?}", e),
-    //     }
-    // }
-    // merge(files, output_file, output_res, output_nodata, output_count, output_bounds, output_band_index, resample_method);
 }
 
-use std::path::Path;
+
 
 /// Parse input args.
 pub struct Params<'a> {

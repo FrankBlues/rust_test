@@ -3,9 +3,12 @@ use std::path::Path;
 
 use gdal::raster::{GdalType, ResampleAlg};
 use gdal::{Dataset, Driver};
-
+// use gdal_sys::{GDALFillRaster, GDALGetRasterBand, GDALSetRasterNoDataValue,
+//     GDALRasterBandH, GDALRWFlag, GDALRasterIO, GDALClose, GDALDeleteRasterNoDataValue};
+// use libc::c_int;
 // extern crate log;
 use log::{debug, info};
+// use ndarray::{s, ArcArray, Array2, Dim, Zip};
 
 use crate::calculate_window;
 use crate::{raster_boundary, RasterMetadata};
@@ -227,7 +230,7 @@ pub fn output_merge_metas<T: AsRef<OsStr>>(
 }
 
 /// Read src data, write to dst data.
-pub fn merge_files<T: AsRef<OsStr>, U: Copy + GdalType>(
+pub fn merge_files<T: AsRef<OsStr>, U: Copy + GdalType + std::convert::Into<f64> + PartialEq>(
     files: Vec<T>,
     output_file: &str,
     out_metas: &RasterMetadata,
@@ -277,6 +280,19 @@ pub fn merge_files<T: AsRef<OsStr>, U: Copy + GdalType>(
         output_ds.set_spatial_ref(&sr).unwrap();
     }
 
+    // fill with nodata    
+    // if let Some(n) = out_metas.nodata {
+    //     let c_dataset = unsafe{output_ds.c_dataset()};
+    //     for i in &band_index {
+    //         unsafe {
+    //             let rb = GDALGetRasterBand(c_dataset, *i as i32);
+    //             GDALFillRaster(rb, n, 0.0);
+    //             // GDALDeleteRasterNoDataValue(rb);
+    //             // GDALSetRasterNoDataValue(rb, n);
+    //         }
+    //     }
+    // }
+
     let [dst_w, dst_s, dst_e, dst_n] = out_metas.bounds;
 
     // Read write
@@ -302,13 +318,10 @@ pub fn merge_files<T: AsRef<OsStr>, U: Copy + GdalType>(
 
         for (i_src, i) in (&band_index).iter().enumerate() {
             let mut src_band = ds.rasterband(*i).unwrap();
-            if let None = src_band.no_data_value() {
-                if let Some(n) = out_metas.nodata {
-                    src_band.set_no_data_value(n).unwrap();
-                }
+            if let Some(n) = out_metas.nodata {
+                src_band.set_no_data_value(n).unwrap();
             }
-
-            let src_data = src_band
+            let mut src_data = src_band
                 .read_as::<U>(
                     src_window.position,
                     src_window.size,
@@ -316,16 +329,58 @@ pub fn merge_files<T: AsRef<OsStr>, U: Copy + GdalType>(
                     Some(resample_method),
                 )
                 .unwrap();
+            // ndarray
+            // let mut src_array = src_band.read_as_array::<U>(
+            //     src_window.position, src_window.size, dst_window.size, Some(resample_method)).unwrap();
 
-            let mut dst_band = output_ds.rasterband(i_src as isize + 1).unwrap();
+            let mut dst_band= output_ds.rasterband(i_src as isize + 1).unwrap();
+
+            // let dst_array = dst_band.read_as_array::<U>(
+            //     dst_window.position, dst_window.size, dst_window.size, Some(resample_method)).unwrap();
+
             if let Some(n) = out_metas.nodata {
                 dst_band.set_no_data_value(n).unwrap();
+
+                // ndarray
+                // Zip::from(&mut src_array).and(&dst_array).for_each(|a, &bb| {
+                //     if (*a).into() == n && bb.into() != n {
+                //         *a = bb;
+                //     }
+                // });
+                // let buffer = Buffer::new(
+                //     (dst_window.size.0, dst_window.size.1),
+                //     src_array.into_raw_vec(),
+                // );
+                // dst_band
+                //     .write(dst_window.position, dst_window.size, &buffer)
+                //     .unwrap();
+
+                // Vec
+                let dst_data = dst_band
+                    .read_as::<U>(
+                        dst_window.position,
+                        dst_window.size,
+                        dst_window.size,
+                        Some(resample_method),
+                    )
+                    .unwrap();
+            
+                for (i, d) in src_data.data.iter_mut().enumerate() {
+                    if (*d).into() == n && dst_data.data[i].into() != n {
+                        *d = dst_data.data[i];
+                    }
+                }
+                dst_band
+                    .write(dst_window.position, dst_window.size, &src_data)
+                    .unwrap();
+            } else {
+                dst_band
+                    .write(dst_window.position, dst_window.size, &src_data)
+                    .unwrap();
             }
-            dst_band
-                .write(dst_window.position, dst_window.size, &src_data)
-                .unwrap();
         }
     }
+    
     info!("END");
     Ok(return_metas)
 }
