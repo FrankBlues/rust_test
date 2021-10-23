@@ -1,6 +1,6 @@
 use gdal::raster::{Buffer, GdalType, RasterBand, ResampleAlg};
-use gdal::Metadata;
-use gdal::{Dataset, Driver};
+// use gdal::Metadata;
+use gdal::{Dataset, Driver, LayerOptions};
 use gdal_test::{gray2rgb, write_block_thread};
 use ndarray::{s, ArcArray, Array2, Dim, Zip};
 use std::path::Path;
@@ -27,7 +27,8 @@ use gdal_sys::{
     GDALDestroyGenImgProjTransformer, GDALGenImgProjTransform, GDALGetCacheMax, GDALGetCacheMax64,
     GDALSetCacheMax, GDALSetCacheMax64, GDALSetGeoTransform, GDALSetProjection,
     GDALSuggestedWarpOutput, GDALTermProgress, GDALTransformerFunc, GDALWarpInitDstNoDataReal,
-    GDALWarpInitSrcNoDataReal, GDALWarpOperationH, GDALWarpOptions,
+    GDALWarpInitSrcNoDataReal, GDALWarpOperationH, GDALWarpOptions, GDALRasterBandH,
+    GDALGetRasterBand, GDALPolygonize, OGRwkbGeometryType
 };
 
 use std::fs::File;
@@ -39,18 +40,20 @@ use xml::reader::{EventReader, XmlEvent};
 use std::ffi::CString;
 
 use std::time::SystemTime;
-mod warp;
-use warp::raster_projection::reproject;
 
-mod io_utils;
-use io_utils::get_files;
+// use warp::raster_projection::reproject;
+
+
+use gdal_test::get_files;
 
 use gdal_test::{raster_boundary, RasterMetadata};
 use std::any::type_name;
 use std::any::Any;
 
-mod merge;
-use merge::merge;
+use gdal::vector::OGRFieldType;
+
+
+// use gdal_test::merge;
 
 // extern crate log;
 // fn type_of(object: &Any) -> &str{
@@ -63,43 +66,83 @@ use merge::merge;
 //     }
 //     ""
 // }
+
 fn main() {
-    env_logger::init();
+    println!("Hello world");
+    // env_logger::init();
+    let input_data = "/data/GF2_PMS1_E108.9_N34.2_20181026_L1A0003549596-MSS11.tif";
+    let nodata_val = 0.0;
+    type U = u8;
+    let _nodata = nodata_val as U;
+    let dataset = Dataset::open(Path::new(input_data)).unwrap();
+    let metas = RasterMetadata::from(&dataset);
+    let rb = dataset.rasterband(1).unwrap();
+    let buffer = rb.read_band_as::<U>().unwrap();
 
-    // let raster_dir = "/data/rtree_data/images/tif";
-    // let in_raster = "/data/rtree_data/images/tif/s_16_xian_prj7.tif";
-    // let first_ds = Dataset::open(&Path::new(in_raster)).expect("Open raster file error.");
-    // let first_metas = RasterMetadata::from(&first_ds);
-    // println!("{:?}", first_metas.nodata);
+    // mask band in memory
+    println!("Create in memery dataset.");
+    let mask_driver = Driver::get("MEM").unwrap();
+    let mut mask_ds = mask_driver.create_with_band_type::<u8>("aa89", 
+        metas.cols as isize, metas.rows as isize, 1).unwrap();
+    mask_ds.set_geo_transform(&metas.geo_transform).unwrap();
+    if let Some(srs) = metas.srs {
+        mask_ds.set_spatial_ref(&srs).unwrap();
+    }
+    let mut mask_band = mask_ds.rasterband(1).unwrap();
+    let mut mask_data = mask_band.read_band_as::<u8>().unwrap();
 
-    // let ds = Dataset::open(Path::new(in_raster)).unwrap();
-    // reproject(&ds, 32648, "/data/test_mosaic/s_16_xian_prj7.tif");
-
-    let output_file = "/data/mosaic113.tif";
-    let output_count: Option<isize> = None;
-    let output_bounds: Option<[f64; 4]> = None;
-    let output_res: Option<(f64, f64)> = None;
-    // let output_res: Option<(f64, f64)> = Some((3e-5, 4e-5));
-    let output_nodata: Option<f64> = None;
-    let output_nodata: Option<f64> = Some(0.0);
-    let output_band_index: Option<Vec<isize>> = None;
-    let resample_method = ResampleAlg::Bilinear;
-
-    let mut files = vec![];
-    for entry in get_files("/data/test_mosaic", ".tif").unwrap() {
-        match entry {
-            Ok(p) => files.push(p.to_str().unwrap().to_owned()),
-            Err(e) => println!("{:?}", e),
+    // println!("sum of mask data before: {}", sum(&mask_data.data));
+    for (m, src) in mask_data.data.iter_mut().zip(buffer.data.iter()) {
+        if *src != _nodata {
+            *m = 1;
+        } else {
+            if _nodata != 0 {
+                *m = 0;
+            }
         }
     }
-    merge(
-        files,
-        output_file,
-        output_res,
-        output_nodata,
-        output_count,
-        output_bounds,
-        output_band_index,
-        resample_method,
-    );
+    
+    // println!("sum of mask data after: {}", sum(&mask_data.data));
+    mask_band.write((0, 0), (metas.cols, metas.rows), &mask_data).unwrap();
+    // buffer.data.as_ptr
+    println!("create shapefile");
+    let driver = Driver::get("ESRI Shapefile").unwrap();
+    let mut ds = driver.create_vector_only("/data/mask.shp").unwrap();
+    let mut mask_lyr = ds.create_layer(LayerOptions {
+        name: "mask",
+        srs: Some(&dataset.spatial_ref().unwrap()),
+        ty: gdal_sys::OGRwkbGeometryType::wkbPolygon,
+        ..Default::default()
+    }).unwrap();
+    mask_lyr.create_defn_fields(&[("temp", OGRFieldType::OFTInteger)]).unwrap();
+    // mask_lyr.create_feature_fields(geometry: Geometry, field_names: &[&str], values: &[FieldValue])
+    // mask_lyr.create_feature_fields(geometry: Geometry, field_names: &[&str], values: &[FieldValue])
+
+    // let mask_lyr = null_mut();
+    let _connected = CString::new("8CONNECTED").unwrap();
+    let _eight = CString::new("8").unwrap();
+    unsafe {
+        let mut options: *mut *mut c_char = null_mut();
+        // options = CSLSetNameValue(options, _connected.as_ptr(), _eight.as_ptr());
+        let c_dataset = dataset.c_dataset();
+        let rb = GDALGetRasterBand(c_dataset, 1);
+        let rb_mask = GDALGetRasterBand(mask_ds.c_dataset(), 1);
+        
+        GDALPolygonize(rb_mask, rb_mask, 
+            mask_lyr.c_layer(), 0, options, None, null_mut());
+    }
+
+    println!("feature count {:?}", mask_lyr.feature_count());
+    // for fea in mask_lyr.features() {
+    //     println!("{:?}", fea.geometry().wkt());
+    // }
+}
+
+fn sum(vec: &Vec<u8>) -> f64{
+    let mut s = 0.0;
+    for i in vec {
+        s += *i as f64;
+    }
+    s
+
 }

@@ -9,9 +9,9 @@ use gdal::{Dataset, Driver};
 // extern crate log;
 use log::{debug, info};
 // use ndarray::{s, ArcArray, Array2, Dim, Zip};
+// extern crate blas_src;
 
-use crate::calculate_window;
-use crate::{raster_boundary, RasterMetadata};
+use crate::{raster_boundary, RasterMetadata, calculate_window};
 
 /// Copy valid pixels from input files to an output file.
 /// All files must have the same number of bands, data type, and
@@ -335,6 +335,7 @@ pub fn merge_files<T: AsRef<OsStr>, U: Copy + GdalType + std::convert::Into<f64>
 
             let mut dst_band= output_ds.rasterband(i_src as isize + 1).unwrap();
 
+            // ndarray
             // let dst_array = dst_band.read_as_array::<U>(
             //     dst_window.position, dst_window.size, dst_window.size, Some(resample_method)).unwrap();
 
