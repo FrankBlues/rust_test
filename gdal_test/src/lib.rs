@@ -19,6 +19,9 @@ pub use window::calculate_window;
 mod merge;
 pub use merge::merge;
 
+mod driver;
+pub use driver::guess_driver_by_name;
+
 // mod warp;
 // pub use warp::raster_projection::reproject;
 // #[cfg(feature = "ndarray")]
@@ -61,7 +64,15 @@ mod tests {
         assert_eq!(pixel_value::<u8>(&dataset, 4, 5, None), vec![54]);
         assert_eq!(pixel_value::<u8>(&dataset, 4, 5, Some(vec![1])), vec![54]);
     }
+
+    #[test]
+    fn driver_test() {
+        assert_eq!(Some("GTiff"), guess_driver_by_name("/data/data.tif"));
+        assert_eq!(Some("ESRI Shapefile"), guess_driver_by_name("/data/data.shp"));
+        
+    }
 }
+
 
 /// return the raster boundary [left, bottom, right, top]
 pub fn raster_boundary(geo_transform: &[f64; 6], raster_size: &(usize, usize)) -> [f64; 4] {
