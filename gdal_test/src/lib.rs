@@ -22,6 +22,9 @@ pub use merge::merge;
 mod driver;
 pub use driver::guess_driver_by_name;
 
+mod warp;
+pub use warp::rpc_transform_pixel;
+
 // mod warp;
 // pub use warp::raster_projection::reproject;
 // #[cfg(feature = "ndarray")]

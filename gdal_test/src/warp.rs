@@ -1,18 +1,24 @@
+use std::ffi::CStr;
+use std::ffi::CString;
+use std::ptr::{null, null_mut};
+use std::path::Path;
+use std::collections::HashMap;
+use std::convert::TryInto;
+
 use gdal::spatial_ref::SpatialRef;
-use gdal::{Dataset, Driver};
+use gdal::{Dataset, Driver, Metadata};
 use gdal_sys::{
     CSLSetNameValue, GDALApproxTransform, GDALApproxTransformerOwnsSubtransformer,
     GDALChunkAndWarpMulti, GDALClose, GDALCreate, GDALCreateApproxTransformer,
     GDALCreateGenImgProjTransformer, GDALCreateGenImgProjTransformer2, GDALCreateWarpOperation,
     GDALCreateWarpOptions, GDALDestroyGenImgProjTransformer, GDALGenImgProjTransform,
     GDALSetGeoTransform, GDALSetProjection, GDALSuggestedWarpOutput, GDALTermProgress,
+    GDALCreateRPCTransformerV2, GDALRPCTransform, GDALRPCInfoV2
 };
 
 use gdal::errors::*;
 use gdal_sys::{CPLErr, GDALResampleAlg};
-use std::ffi::CStr;
-use std::ffi::CString;
-use std::ptr::{null, null_mut};
+
 
 use libc::c_char;
 
@@ -202,6 +208,77 @@ pub mod raster_projection {
         }
         Ok(())
     }
+}
+
+/// Transform pixel coordinate to geo coordinates
+pub fn rpc_transform_pixel(input_data: String, 
+    x:&mut Vec<f64>, 
+    y:&mut Vec<f64>, 
+    z:&mut Vec<f64>) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    // RPC
+    let dataset = Dataset::open(Path::new(&input_data)).expect("Open input image fail!!");
+    let rpc = dataset.metadata_domain("RPC");
+
+    let gdal_rpc_info;
+    match rpc {
+        Some(r) => gdal_rpc_info = parse_rpc_meta(r),
+        None => panic!("Input image has not rpc file!!")
+    }
+
+    //  let gdal_rpc_info = parse_rpc_meta(rpc.unwrap());
+
+    let (_x, _y, _z) = (x.as_mut_slice(), y.as_mut_slice(), z.as_mut_slice());
+    unsafe{
+        let rpc_transform = GDALCreateRPCTransformerV2(&gdal_rpc_info, 0, 0.0, null_mut());
+        GDALRPCTransform(rpc_transform, 0, 2,
+            _x.as_mut_ptr(),
+            _y.as_mut_ptr(),
+            _z.as_mut_ptr(),
+            &mut 0);
+    }
+    return (x.to_owned(), y.to_owned(), z.to_owned())
+}
+
+fn parse_rpc_meta(rpc_meta: Vec<String>) -> GDALRPCInfoV2 {
+    let mut rpcs = HashMap::new();
+    for s in &rpc_meta {
+        let elements: Vec<&str> = s.split("=").collect();
+        rpcs.insert(String::from(elements[0]), String::from(elements[1]));
+    }
+    GDALRPCInfoV2 {
+        dfLINE_OFF: parse_float(rpcs.get("LINE_OFF").unwrap()),
+        dfSAMP_OFF: parse_float(rpcs.get("SAMP_OFF").unwrap()),
+        dfLAT_OFF: parse_float(rpcs.get("LAT_OFF").unwrap()),
+        dfLONG_OFF: parse_float(rpcs.get("LONG_OFF").unwrap()),
+        dfHEIGHT_OFF: parse_float(rpcs.get("HEIGHT_OFF").unwrap()),
+        dfLINE_SCALE: parse_float(rpcs.get("LINE_SCALE").unwrap()),
+        dfSAMP_SCALE: parse_float(rpcs.get("SAMP_SCALE").unwrap()),
+        dfLAT_SCALE: parse_float(rpcs.get("LAT_SCALE").unwrap()),
+        dfLONG_SCALE: parse_float(rpcs.get("LONG_SCALE").unwrap()),
+        dfHEIGHT_SCALE: parse_float(rpcs.get("HEIGHT_SCALE").unwrap()),
+        adfLINE_NUM_COEFF: parse_coef(rpcs.get("LINE_NUM_COEFF").unwrap()),
+        adfLINE_DEN_COEFF: parse_coef(rpcs.get("LINE_DEN_COEFF").unwrap()),
+        adfSAMP_NUM_COEFF: parse_coef(rpcs.get("SAMP_NUM_COEFF").unwrap()),
+        adfSAMP_DEN_COEFF: parse_coef(rpcs.get("SAMP_DEN_COEFF").unwrap()),
+        dfMIN_LONG: -180.0,
+        dfMIN_LAT: -90.0,
+        dfMAX_LONG: 180.0,
+        dfMAX_LAT: 90.0,
+        dfERR_BIAS: parse_float(rpcs.get("ERR_BIAS").unwrap()),
+        dfERR_RAND: parse_float(rpcs.get("ERR_RAND").unwrap()),
+    }
+}
+
+fn parse_float(s: &String) -> f64 {
+    s.parse::<f64>().unwrap()
+}
+
+fn parse_coef(s: &String) -> [f64; 20] {
+    let coefs = s.split(" ")
+        .map(|e| parse_float(&String::from(e)))
+        .collect::<Vec::<f64>>();
+    assert_eq!(coefs.len(), 20);
+    coefs.as_slice().try_into().expect("slice with incorrect length")
 }
 
 fn _last_cpl_err(cpl_err_class: CPLErr::Type) -> GdalError {

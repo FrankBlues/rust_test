@@ -47,10 +47,11 @@ use std::time::SystemTime;
 
 // use warp::raster_projection::reproject;
 
-
 use gdal_test::get_files;
 
 use gdal_test::{raster_boundary, RasterMetadata, guess_driver_by_name};
+use gdal_test::rpc_transform_pixel;
+
 use std::any::type_name;
 use std::any::Any;
 use std::convert::TryInto;
@@ -85,67 +86,20 @@ fn string2mut_cchar(s: String) -> *mut c_char {
     cchar.as_mut_slice().as_mut_ptr()
 }
 
-fn parse_rpc_meta(rpc_meta: Vec<String>) -> GDALRPCInfoV2 {
-    let mut rpcs = HashMap::new();
-    for s in &rpc_meta {
-        let elements: Vec<&str> = s.split("=").collect();
-        rpcs.insert(String::from(elements[0]), String::from(elements[1]));
-    }
-    GDALRPCInfoV2 {
-        dfLINE_OFF: parse_float(rpcs.get("LINE_OFF").unwrap()),
-        dfSAMP_OFF: parse_float(rpcs.get("SAMP_OFF").unwrap()),
-        dfLAT_OFF: parse_float(rpcs.get("LAT_OFF").unwrap()),
-        dfLONG_OFF: parse_float(rpcs.get("LONG_OFF").unwrap()),
-        dfHEIGHT_OFF: parse_float(rpcs.get("HEIGHT_OFF").unwrap()),
-        dfLINE_SCALE: parse_float(rpcs.get("LINE_SCALE").unwrap()),
-        dfSAMP_SCALE: parse_float(rpcs.get("SAMP_SCALE").unwrap()),
-        dfLAT_SCALE: parse_float(rpcs.get("LAT_SCALE").unwrap()),
-        dfLONG_SCALE: parse_float(rpcs.get("LONG_SCALE").unwrap()),
-        dfHEIGHT_SCALE: parse_float(rpcs.get("HEIGHT_SCALE").unwrap()),
-        adfLINE_NUM_COEFF: parse_coef(rpcs.get("LINE_NUM_COEFF").unwrap()),
-        adfLINE_DEN_COEFF: parse_coef(rpcs.get("LINE_DEN_COEFF").unwrap()),
-        adfSAMP_NUM_COEFF: parse_coef(rpcs.get("SAMP_NUM_COEFF").unwrap()),
-        adfSAMP_DEN_COEFF: parse_coef(rpcs.get("SAMP_DEN_COEFF").unwrap()),
-        dfMIN_LONG: -180.0,
-        dfMIN_LAT: -90.0,
-        dfMAX_LONG: 180.0,
-        dfMAX_LAT: 90.0,
-        dfERR_BIAS: parse_float(rpcs.get("ERR_BIAS").unwrap()),
-        dfERR_RAND: parse_float(rpcs.get("ERR_RAND").unwrap()),
-    }
-}
 
-fn parse_float(s: &String) -> f64 {
-    s.parse::<f64>().unwrap()
-}
-
-fn parse_coef(s: &String) -> [f64; 20] {
-    let coefs = s.split(" ")
-        .map(|e| parse_float(&String::from(e)))
-        .collect::<Vec::<f64>>();
-    assert_eq!(coefs.len(), 20);
-    coefs.as_slice().try_into().expect("slice with incorrect length")
-}
 
 fn main() {
+
+    let mut x1 = vec![0.0, 0.0];
+    let mut y1 = vec![0.0, 2000.0];
+    let mut z1 = vec![0.0, 0.0];
+    
     // RPC
     let input_data = "/data/GF2_PMS1_E108.9_N34.2_20181026_L1A0003549596/GF2_PMS1_E108.9_N34.2_20181026_L1A0003549596-MSS1.tiff";
-    let dataset = Dataset::open(Path::new(input_data)).unwrap();
-    let (width, height) = dataset.raster_size();
-    let rpc = dataset.metadata_domain("RPC");
-
-    let gdal_rpc_info = parse_rpc_meta(rpc.unwrap());
-
-    unsafe{
-
-        let rpc_transform = GDALCreateRPCTransformerV2(&gdal_rpc_info, 0, 0.0, null_mut());
-        let mut x = [0.0, 0.0];
-        let mut y = [0.0, height as f64];
-        let mut z = [0.0, 0.0];
-        GDALRPCTransform(rpc_transform, 0, 2, x.as_mut_ptr(), y.as_mut_ptr(), z.as_mut_ptr(), &mut 0);
-        println!("{:?}, {:?}", x, y)
-    }
-
+    // let input_data = "/data/GF2_PMS1_E108.9_N34.2_20181026_L1A0003549596-MSS11.tif";
+    // let dataset = Dataset::open(Path::new(&input_data)).unwrap();
+    let (x, y, _) = rpc_transform_pixel(String::from(input_data), &mut x1, &mut y1, &mut z1);
+    println!("{:?}, {:?}", x, y)
 
     // Polygonize
     // let uid = Uuid::new_v4();
